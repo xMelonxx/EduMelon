@@ -1,0 +1,322 @@
+<!DOCTYPE html>
+
+<html class="dark" lang="pl"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800;900&amp;family=Inter:wght@400;500;600&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<script id="tailwind-config">
+      tailwind.config = {
+        darkMode: "class",
+        theme: {
+          extend: {
+            "colors": {
+                    "on-error-container": "#ffdad6",
+                    "surface-container": "#1c211e",
+                    "tertiary": "#ffd6d9",
+                    "on-secondary": "#2b322f",
+                    "tertiary-fixed-dim": "#ffb2b9",
+                    "outline-variant": "#3d4a3e",
+                    "error-container": "#93000a",
+                    "surface-dim": "#0f1412",
+                    "secondary-container": "#434b47",
+                    "on-background": "#dfe4e0",
+                    "on-secondary-fixed-variant": "#414845",
+                    "surface-variant": "#313633",
+                    "surface": "#0f1412",
+                    "primary-container": "#4ade80",
+                    "on-tertiary": "#67001f",
+                    "surface-container-lowest": "#0a0f0d",
+                    "on-primary-fixed-variant": "#005227",
+                    "inverse-surface": "#dfe4e0",
+                    "on-secondary-container": "#b3bab5",
+                    "on-primary-container": "#005e2d",
+                    "surface-container-low": "#181d1a",
+                    "on-tertiary-fixed": "#400010",
+                    "primary-fixed-dim": "#4de082",
+                    "on-tertiary-container": "#97253c",
+                    "inverse-on-surface": "#2c322f",
+                    "tertiary-container": "#ffafb7",
+                    "on-error": "#690005",
+                    "tertiary-fixed": "#ffdadc",
+                    "on-primary": "#003919",
+                    "surface-container-high": "#262b29",
+                    "on-surface": "#dfe4e0",
+                    "secondary-fixed-dim": "#c1c8c3",
+                    "primary-fixed": "#6dfe9c",
+                    "primary": "#6bfb9a",
+                    "surface-tint": "#4de082",
+                    "error": "#ffb4ab",
+                    "secondary-fixed": "#dde4df",
+                    "surface-container-highest": "#313633",
+                    "on-surface-variant": "#bccabb",
+                    "background": "#0f1412",
+                    "secondary": "#c1c8c3",
+                    "on-secondary-fixed": "#161d1a",
+                    "surface-bright": "#353a38",
+                    "on-primary-fixed": "#00210c",
+                    "on-tertiary-fixed-variant": "#891933",
+                    "inverse-primary": "#006d36",
+                    "outline": "#869486"
+            },
+            "borderRadius": {
+                    "DEFAULT": "0.25rem",
+                    "lg": "0.5rem",
+                    "xl": "0.75rem",
+                    "full": "9999px"
+            },
+            "spacing": {
+                    "stack-md": "16px",
+                    "stack-lg": "32px",
+                    "gutter": "16px",
+                    "container-padding": "24px",
+                    "unit": "8px",
+                    "stack-sm": "8px"
+            },
+            "fontFamily": {
+                    "label-caps": ["Inter"],
+                    "data-mono": ["monospace"],
+                    "body-sm": ["Inter"],
+                    "body-lg": ["Inter"],
+                    "h2": ["Plus Jakarta Sans"],
+                    "h3": ["Plus Jakarta Sans"],
+                    "h1": ["Plus Jakarta Sans"],
+                    "body-md": ["Inter"]
+            },
+            "fontSize": {
+                    "label-caps": ["12px", {"lineHeight": "1.0", "letterSpacing": "0.05em", "fontWeight": "600"}],
+                    "data-mono": ["14px", {"lineHeight": "1.0", "fontWeight": "500"}],
+                    "body-sm": ["14px", {"lineHeight": "1.5", "fontWeight": "400"}],
+                    "body-lg": ["18px", {"lineHeight": "1.6", "fontWeight": "400"}],
+                    "h2": ["32px", {"lineHeight": "1.3", "letterSpacing": "-0.01em", "fontWeight": "600"}],
+                    "h3": ["24px", {"lineHeight": "1.4", "fontWeight": "600"}],
+                    "h1": ["40px", {"lineHeight": "1.2", "letterSpacing": "-0.02em", "fontWeight": "700"}],
+                    "body-md": ["16px", {"lineHeight": "1.6", "fontWeight": "400"}]
+            }
+          },
+        },
+      }
+    </script>
+<style>
+        .material-symbols-outlined {
+            font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24;
+        }
+        .donut-chart {
+            background: radial-gradient(circle at center, transparent 65%, #4ADE80 65.5%, #4ADE80 75%, transparent 75.5%);
+        }
+        .custom-scrollbar::-webkit-scrollbar { width: 6px; }
+        .custom-scrollbar::-webkit-scrollbar-track { background: #0A0F0D; }
+        .custom-scrollbar::-webkit-scrollbar-thumb { background: #212C28; border-radius: 10px; }
+    </style>
+</head>
+<body class="bg-surface-container-lowest text-on-surface font-body-md selection:bg-primary selection:text-on-primary">
+<!-- TopAppBar Shell -->
+<header class="bg-[#0A0F0D] dark:bg-[#0A0F0D] flex justify-between items-center w-full px-8 h-16 sticky top-0 z-50 border-b border-[#212C28]">
+<div class="flex items-center gap-8">
+<span class="text-xl font-black tracking-tighter text-[#4ADE80] font-['Plus_Jakarta_Sans'] antialiased">EduMelon</span>
+<nav class="hidden md:flex items-center gap-6">
+<a class="text-[#4ADE80] font-bold border-b-2 border-[#4ADE80] pb-1 font-['Plus_Jakarta_Sans'] text-sm hover:text-[#4ADE80] transition-colors duration-200" href="#">Hub</a>
+<a class="text-emerald-700/60 font-['Plus_Jakarta_Sans'] text-sm hover:text-[#4ADE80] transition-colors duration-200" href="#">Tests</a>
+<a class="text-emerald-700/60 font-['Plus_Jakarta_Sans'] text-sm hover:text-[#4ADE80] transition-colors duration-200" href="#">Profile</a>
+</nav>
+</div>
+<div class="flex items-center gap-4">
+<div class="flex items-center gap-2 px-3 py-1 bg-surface-container rounded-full border border-outline-variant">
+<span class="material-symbols-outlined text-primary text-sm">timer</span>
+<span class="font-data-mono text-primary text-xs">14:52</span>
+</div>
+<button class="material-symbols-outlined text-on-surface-variant hover:text-primary transition-all">visibility_off</button>
+<button class="material-symbols-outlined text-[#4ADE80] scale-98 active:opacity-80 transition-all">account_circle</button>
+</div>
+</header>
+<div class="flex min-h-screen">
+<!-- SideNavBar Shell -->
+<aside class="bg-[#141B18] dark:bg-[#141B18] fixed left-0 top-0 h-screen w-64 border-r border-[#212C28] rounded-none hidden md:flex flex-col h-full py-8 z-40 mt-16">
+<div class="px-6 mb-8 flex items-center gap-3">
+<div class="w-10 h-10 rounded-full bg-secondary-container flex items-center justify-center overflow-hidden border border-outline-variant">
+<img alt="Dr. Researcher" data-alt="professional medical researcher avatar with glasses and clinical attire on a clean background" src="https://lh3.googleusercontent.com/aida-public/AB6AXuB2pGXJ-chZCMO5WClJmyT6Px9rXO-omGFJ_c9dwHFS5-lsScq59Uz5l1Ml1Q_Q9YT4Iige0v0COw_2HdJcbyTLCYHShPaRJ6ZDLBtvAiKJohixdoe08kFKbax4Htzn4uQPa7yRf9Xfx_ixeykIFs2DpGuVXhuWWpybBzmbM-mIzgyuJXKf9MvnjZBqMQW2uWH--T6E57HPfX5VtR-dkDFAP2n4f0KxVmjTWBYxkgG8SL3vp25LqfCGJFsbJ8m6K323YAage5WHBkA"/>
+</div>
+<div>
+<p class="font-h3 text-xs text-on-surface">Dr. Researcher</p>
+<p class="font-label-caps text-[10px] text-emerald-700/70">Tests Module Active</p>
+</div>
+</div>
+<nav class="flex-1">
+<a class="text-emerald-700/70 flex items-center gap-3 px-6 py-4 hover:bg-[#1C2622] hover:text-[#4ADE80] transition-all font-['Plus_Jakarta_Sans'] text-sm font-medium" href="#">
+<span class="material-symbols-outlined">grid_view</span>
+<span>Hub</span>
+</a>
+<a class="text-[#4ADE80] bg-emerald-400/5 border-r-2 border-[#4ADE80] flex items-center gap-3 px-6 py-4 transition-all font-['Plus_Jakarta_Sans'] text-sm font-medium" href="#">
+<span class="material-symbols-outlined" data-weight="fill" style="font-variation-settings: 'FILL' 1;">quiz</span>
+<span>Tests</span>
+</a>
+<a class="text-emerald-700/70 flex items-center gap-3 px-6 py-4 hover:bg-[#1C2622] hover:text-[#4ADE80] transition-all font-['Plus_Jakarta_Sans'] text-sm font-medium" href="#">
+<span class="material-symbols-outlined">person</span>
+<span>Profile</span>
+</a>
+<a class="text-emerald-700/70 flex items-center gap-3 px-6 py-4 hover:bg-[#1C2622] hover:text-[#4ADE80] transition-all font-['Plus_Jakarta_Sans'] text-sm font-medium" href="#">
+<span class="material-symbols-outlined">settings</span>
+<span>Settings</span>
+</a>
+</nav>
+<div class="px-6 mt-auto">
+<button class="w-full py-3 px-4 rounded-xl border border-[#4ADE80] text-[#4ADE80] font-label-caps text-[11px] hover:bg-primary/10 transition-all">
+                    Distraction-Free Mode
+                </button>
+</div>
+</aside>
+<!-- Main Content Canvas -->
+<main class="flex-1 md:ml-64 p-stack-lg bg-surface-container-lowest custom-scrollbar overflow-y-auto">
+<div class="max-w-5xl mx-auto space-y-stack-lg">
+<!-- Hero Section: Analytics Overview -->
+<section class="grid grid-cols-1 lg:grid-cols-3 gap-gutter items-center bg-[#141B18] rounded-[24px] border border-[#212C28] p-container-padding overflow-hidden">
+<!-- Donut Chart -->
+<div class="relative w-48 h-48 mx-auto lg:mx-0 flex items-center justify-center">
+<svg class="w-full h-full transform -rotate-90">
+<circle class="text-surface-variant" cx="96" cy="96" fill="transparent" r="80" stroke="currentColor" stroke-width="12"></circle>
+<circle class="text-[#4ADE80]" cx="96" cy="96" fill="transparent" r="80" stroke="currentColor" stroke-dasharray="502" stroke-dashoffset="75" stroke-linecap="round" stroke-width="12"></circle>
+</svg>
+<div class="absolute inset-0 flex flex-col items-center justify-center text-center">
+<span class="font-h1 text-4xl text-primary">85%</span>
+<span class="font-label-caps text-[10px] text-on-surface-variant">WYNIK OGÓLNY</span>
+</div>
+</div>
+<!-- Statistics & Text -->
+<div class="lg:col-span-2 space-y-4">
+<div class="flex flex-col gap-1">
+<h2 class="font-h2 text-primary">Analiza Wyników</h2>
+<p class="font-body-md text-on-surface-variant max-w-md">
+                                Świetna robota! Twój wynik jest o 12% wyższy niż średnia krajowa dla tego modułu. Skup się na błędach poniżej, aby osiągnąć 100%.
+                            </p>
+</div>
+<div class="flex items-center gap-6">
+<div class="flex flex-col">
+<span class="font-label-caps text-on-surface-variant text-[10px]">POPRAWNE</span>
+<span class="font-h3 text-primary">34</span>
+</div>
+<div class="w-[1px] h-8 bg-[#212C28]"></div>
+<div class="flex flex-col">
+<span class="font-label-caps text-on-surface-variant text-[10px]">BŁĘDNE</span>
+<span class="font-h3 text-error">6</span>
+</div>
+<div class="w-[1px] h-8 bg-[#212C28]"></div>
+<div class="flex flex-col">
+<span class="font-label-caps text-on-surface-variant text-[10px]">POMINIĘTE</span>
+<span class="font-h3 text-on-surface-variant">0</span>
+</div>
+</div>
+<div class="flex flex-wrap gap-3 pt-4">
+<button class="bg-primary text-on-primary font-label-caps px-6 py-3 rounded-full flex items-center gap-2 hover:opacity-90 transition-all scale-98 active:scale-95">
+<span class="material-symbols-outlined text-[18px]">refresh</span>
+                                Rozwiąż jeszcze raz
+                            </button>
+<button class="border border-primary text-primary font-label-caps px-6 py-3 rounded-full flex items-center gap-2 hover:bg-primary/10 transition-all scale-98 active:scale-95">
+<span class="material-symbols-outlined text-[18px]">error</span>
+                                Tylko błędne
+                            </button>
+</div>
+</div>
+</section>
+<!-- Failed Questions Section -->
+<section class="space-y-stack-md">
+<div class="flex items-center justify-between">
+<h3 class="font-h3 text-on-surface flex items-center gap-3">
+<span class="material-symbols-outlined text-error">warning</span>
+                            Pytania wymagające poprawy
+                        </h3>
+<span class="font-label-caps text-error bg-error/10 px-3 py-1 rounded-full border border-error/20">6 Błędów</span>
+</div>
+<!-- Question List (Asymmetric Grid/Bento Layout) -->
+<div class="grid grid-cols-1 md:grid-cols-2 gap-gutter">
+<!-- Item 1 -->
+<article class="bg-[#141B18] border border-[#212C28] rounded-[24px] p-container-padding space-y-4 hover:border-error/50 transition-colors group">
+<div class="flex justify-between items-start">
+<span class="font-label-caps text-on-surface-variant text-[10px]">PYTANIE 12 • STRONA 45</span>
+<span class="bg-error/10 text-error px-2 py-0.5 rounded-full text-[10px] font-bold">KRYTYCZNE</span>
+</div>
+<h4 class="font-h3 text-lg text-on-surface leading-tight">Który z wymienionych markerów jest najbardziej specyficzny dla wczesnej diagnostyki ostrego uszkodzenia nerek?</h4>
+<div class="space-y-2">
+<div class="flex items-center gap-3 p-3 bg-error/5 border border-error/10 rounded-xl">
+<span class="material-symbols-outlined text-error text-lg">close</span>
+<div>
+<p class="font-label-caps text-[9px] text-error/70">TWOJA ODPOWIEDŹ</p>
+<p class="text-sm font-medium">Kreatynina w surowicy</p>
+</div>
+</div>
+<div class="flex items-center gap-3 p-3 bg-primary/5 border border-primary/10 rounded-xl">
+<span class="material-symbols-outlined text-primary text-lg">check_circle</span>
+<div>
+<p class="font-label-caps text-[9px] text-primary/70">POPRAWNA ODPOWIEDŹ</p>
+<p class="text-sm font-medium">NGAL (lipokalina związana z żelatynazą neutrofilową)</p>
+</div>
+</div>
+</div>
+<div class="bg-surface-container-lowest p-4 rounded-xl border border-[#212C28]">
+<p class="font-label-caps text-[9px] text-on-surface-variant mb-1">WYJAŚNIENIE</p>
+<p class="text-sm text-on-surface-variant leading-relaxed">Kreatynina jest markerem późnym i zależnym od wielu czynników. NGAL pojawia się w moczu i surowicy już w ciągu 2 godzin od uszkodzenia niedokrwiennego lub toksycznego cewek nerkowych.</p>
+</div>
+<div class="relative h-32 w-full rounded-xl overflow-hidden border border-[#212C28]">
+<img class="w-full h-full object-cover opacity-50 group-hover:opacity-100 transition-opacity" data-alt="microscopic view of kidney tissue cells with highlighted biomarkers in clinical blue and green lighting" src="https://lh3.googleusercontent.com/aida-public/AB6AXuAvRVF7jSdIg8Jbg3H0ySMyFgxvCFWU9nqmoPjkmC-3pINbvCXk5e88yjYF6HGW7HAYfAz5COWu0iX4BcDxa9iH5kLZXaJcbQ8dFQGRL7yGHX4-iXsNOi_-ru7_vJHGhDbdSxTgPOwRuwHmgXllOTGiowWZ0kBNImgriRqX5r7wgXEJKiAJ6NhTAyshEm_95AXE9iFDdVxMM2cZXtT_4kIwfom_ULMZI4iKYrEM5C2Sbl0IN5bt1qyHNdiReL_knoVHe4u0MHBL_SE"/>
+<div class="absolute inset-0 bg-gradient-to-t from-[#141B18] to-transparent"></div>
+<span class="absolute bottom-2 right-2 font-label-caps text-[8px] bg-surface-container/80 px-2 py-1 rounded">Ryc. 4.2: Kinetyka Markerów</span>
+</div>
+</article>
+<!-- Item 2 -->
+<article class="bg-[#141B18] border border-[#212C28] rounded-[24px] p-container-padding space-y-4 hover:border-error/50 transition-colors group">
+<div class="flex justify-between items-start">
+<span class="font-label-caps text-on-surface-variant text-[10px]">PYTANIE 28 • STRONA 112</span>
+<span class="bg-surface-variant text-on-surface-variant px-2 py-0.5 rounded-full text-[10px] font-bold">ANATOMIA</span>
+</div>
+<h4 class="font-h3 text-lg text-on-surface leading-tight">Wskaż strukturę przechodzącą przez otwór owalny kości klinowej.</h4>
+<div class="space-y-2">
+<div class="flex items-center gap-3 p-3 bg-error/5 border border-error/10 rounded-xl">
+<span class="material-symbols-outlined text-error text-lg">close</span>
+<div>
+<p class="font-label-caps text-[9px] text-error/70">TWOJA ODPOWIEDŹ</p>
+<p class="text-sm font-medium">Nerw szczękowy (V2)</p>
+</div>
+</div>
+<div class="flex items-center gap-3 p-3 bg-primary/5 border border-primary/10 rounded-xl">
+<span class="material-symbols-outlined text-primary text-lg">check_circle</span>
+<div>
+<p class="font-label-caps text-[9px] text-primary/70">POPRAWNA ODPOWIEDŹ</p>
+<p class="text-sm font-medium">Nerw żuchwowy (V3)</p>
+</div>
+</div>
+</div>
+<div class="bg-surface-container-lowest p-4 rounded-xl border border-[#212C28]">
+<p class="font-label-caps text-[9px] text-on-surface-variant mb-1">WYJAŚNIENIE</p>
+<p class="text-sm text-on-surface-variant leading-relaxed">Przez otwór owalny (foramen ovale) przechodzi nerw żuchwowy (V3), splot żylny otworu owalnego oraz opcjonalnie nerw skalisty mniejszy.</p>
+</div>
+<div class="relative h-32 w-full rounded-xl overflow-hidden border border-[#212C28]">
+<img class="w-full h-full object-cover opacity-50 group-hover:opacity-100 transition-opacity" data-alt="high resolution anatomical 3D render of a human skull base showing neural foramina with technical labels" src="https://lh3.googleusercontent.com/aida-public/AB6AXuARXxA4wm5Q3sc9lmuWI8_Irus2mzUeyanmL3WAkS2Hs1k8eyPtnutRBEt7QjThxjUFNayr8hpQBVkoL7pUa82BAlL57F0yHbexVDPyjHFzZaYqSR-1zyKZDBC8rkmdWqKKj_TD697VEmlG2XvyR_d8ks5Tx5coKVW9O5mnWhi4pTmYpVaYwBK1sr3lokAD2YSRRbtbs7HS6s0Opbg479OhkEItej4qOUh0Ms6f-iLd4YKCuuSgDtJVukV8jyXL7c5xDd6ldifQtok"/>
+<div class="absolute inset-0 bg-gradient-to-t from-[#141B18] to-transparent"></div>
+<span class="absolute bottom-2 right-2 font-label-caps text-[8px] bg-surface-container/80 px-2 py-1 rounded">Diagram: Podstawa Czaszki</span>
+</div>
+</article>
+</div>
+</section>
+<!-- History Context (Small Side-Information Style) -->
+<section class="bg-surface-container-high rounded-xl p-container-padding border border-outline-variant flex items-center justify-between gap-6">
+<div class="flex items-center gap-4">
+<div class="p-3 bg-primary/10 rounded-full">
+<span class="material-symbols-outlined text-primary">trending_up</span>
+</div>
+<div>
+<p class="text-sm font-semibold text-on-surface">Progres nauki</p>
+<p class="text-xs text-on-surface-variant">Twój wynik poprawił się o 8% względem ostatniego testu.</p>
+</div>
+</div>
+<div class="hidden sm:flex gap-2">
+<div class="w-2 h-8 bg-primary rounded-full"></div>
+<div class="w-2 h-10 bg-primary rounded-full"></div>
+<div class="w-2 h-6 bg-primary/30 rounded-full"></div>
+<div class="w-2 h-12 bg-primary rounded-full"></div>
+</div>
+</section>
+</div>
+</main>
+</div>
+</body></html>

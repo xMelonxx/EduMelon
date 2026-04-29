@@ -1,0 +1,320 @@
+<!DOCTYPE html>
+
+<html class="dark" lang="pl"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&amp;family=Inter:wght@400;500;600&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<script id="tailwind-config">
+      tailwind.config = {
+        darkMode: "class",
+        theme: {
+          extend: {
+            "colors": {
+                    "on-error-container": "#ffdad6",
+                    "surface-container": "#1c211e",
+                    "tertiary": "#ffd6d9",
+                    "on-secondary": "#2b322f",
+                    "tertiary-fixed-dim": "#ffb2b9",
+                    "outline-variant": "#3d4a3e",
+                    "error-container": "#93000a",
+                    "surface-dim": "#0f1412",
+                    "secondary-container": "#434b47",
+                    "on-background": "#dfe4e0",
+                    "on-secondary-fixed-variant": "#414845",
+                    "surface-variant": "#313633",
+                    "surface": "#0f1412",
+                    "primary-container": "#4ade80",
+                    "on-tertiary": "#67001f",
+                    "surface-container-lowest": "#0a0f0d",
+                    "on-primary-fixed-variant": "#005227",
+                    "inverse-surface": "#dfe4e0",
+                    "on-secondary-container": "#b3bab5",
+                    "on-primary-container": "#005e2d",
+                    "surface-container-low": "#181d1a",
+                    "on-tertiary-fixed": "#400010",
+                    "primary-fixed-dim": "#4de082",
+                    "on-tertiary-container": "#97253c",
+                    "inverse-on-surface": "#2c322f",
+                    "tertiary-container": "#ffafb7",
+                    "on-error": "#690005",
+                    "tertiary-fixed": "#ffdadc",
+                    "on-primary": "#003919",
+                    "surface-container-high": "#262b29",
+                    "on-surface": "#dfe4e0",
+                    "secondary-fixed-dim": "#c1c8c3",
+                    "primary-fixed": "#6dfe9c",
+                    "primary": "#6bfb9a",
+                    "surface-tint": "#4de082",
+                    "error": "#ffb4ab",
+                    "secondary-fixed": "#dde4df",
+                    "surface-container-highest": "#313633",
+                    "on-surface-variant": "#bccabb",
+                    "background": "#0f1412",
+                    "secondary": "#c1c8c3",
+                    "on-secondary-fixed": "#161d1a",
+                    "surface-bright": "#353a38",
+                    "on-primary-fixed": "#00210c",
+                    "on-tertiary-fixed-variant": "#891933",
+                    "inverse-primary": "#006d36",
+                    "outline": "#869486"
+            },
+            "borderRadius": {
+                    "DEFAULT": "0.25rem",
+                    "lg": "0.5rem",
+                    "xl": "0.75rem",
+                    "full": "9999px"
+            },
+            "spacing": {
+                    "stack-md": "16px",
+                    "stack-lg": "32px",
+                    "gutter": "16px",
+                    "container-padding": "24px",
+                    "unit": "8px",
+                    "stack-sm": "8px"
+            },
+            "fontFamily": {
+                    "label-caps": ["Inter"],
+                    "data-mono": ["monospace"],
+                    "body-sm": ["Inter"],
+                    "body-lg": ["Inter"],
+                    "h2": ["Plus Jakarta Sans"],
+                    "h3": ["Plus Jakarta Sans"],
+                    "h1": ["Plus Jakarta Sans"],
+                    "body-md": ["Inter"]
+            },
+            "fontSize": {
+                    "label-caps": ["12px", {"lineHeight": "1.0", "letterSpacing": "0.05em", "fontWeight": "600"}],
+                    "data-mono": ["14px", {"lineHeight": "1.0", "fontWeight": "500"}],
+                    "body-sm": ["14px", {"lineHeight": "1.5", "fontWeight": "400"}],
+                    "body-lg": ["18px", {"lineHeight": "1.6", "fontWeight": "400"}],
+                    "h2": ["32px", {"lineHeight": "1.3", "letterSpacing": "-0.01em", "fontWeight": "600"}],
+                    "h3": ["24px", {"lineHeight": "1.4", "fontWeight": "600"}],
+                    "h1": ["40px", {"lineHeight": "1.2", "letterSpacing": "-0.02em", "fontWeight": "700"}],
+                    "body-md": ["16px", {"lineHeight": "1.6", "fontWeight": "400"}]
+            }
+          },
+        },
+      }
+    </script>
+<style>
+        body { background-color: #0A0F0D; }
+        .material-symbols-outlined {
+            font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24;
+        }
+    </style>
+</head>
+<body class="font-body-md text-on-surface antialiased overflow-x-hidden">
+<!-- TopAppBar -->
+<header class="bg-[#0A0F0D] flex justify-between items-center w-full px-8 h-16 sticky top-0 z-50 border-b border-[#212C28] font-['Plus_Jakarta_Sans']">
+<div class="flex items-center gap-8">
+<span class="text-xl font-black tracking-tighter text-[#4ADE80]">EduMelon</span>
+<nav class="hidden md:flex gap-6">
+<a class="text-[#4ADE80] font-bold border-b-2 border-[#4ADE80] pb-1 hover:text-[#4ADE80] transition-colors duration-200" href="#">Hub</a>
+<a class="text-emerald-700/60 hover:text-[#4ADE80] transition-colors duration-200" href="#">Tests</a>
+<a class="text-emerald-700/60 hover:text-[#4ADE80] transition-colors duration-200" href="#">Profile</a>
+<a class="text-emerald-700/60 hover:text-[#4ADE80] transition-colors duration-200" href="#">Settings</a>
+</nav>
+</div>
+<div class="flex items-center gap-4">
+<button class="text-[#4ADE80] scale-98 active:opacity-80 transition-all">
+<span class="material-symbols-outlined">timer</span>
+</button>
+<button class="text-[#4ADE80] scale-98 active:opacity-80 transition-all">
+<span class="material-symbols-outlined">visibility_off</span>
+</button>
+<button class="text-[#4ADE80] scale-98 active:opacity-80 transition-all">
+<span class="material-symbols-outlined">account_circle</span>
+</button>
+</div>
+</header>
+<div class="flex">
+<!-- SideNavBar -->
+<aside class="hidden md:flex flex-col h-[calc(100vh-64px)] w-64 bg-[#141B18] border-r border-[#212C28] fixed left-0 top-16 z-40 py-8">
+<div class="px-6 mb-8 flex items-center gap-3">
+<div class="w-10 h-10 rounded-full bg-[#1C2622] overflow-hidden border border-[#212C28]">
+<img alt="Medical Practitioner Profile" data-alt="Close up portrait of a medical professional with a focused expression in a dimly lit laboratory setting" src="https://lh3.googleusercontent.com/aida-public/AB6AXuAuw9e--_hWwQFQlzZRrpLVWfiQj_KCtB_0OON6x4YDEBtGtFohQAUAB6UZnzjVtXNChQ7l-LvboK3qA4uCNckCWpMN-3QPA5HQkiSRTMGAFvgqm4Vhh01h3Yat7CX9G6cSFHeM8zxvfiPqAc3qqJXI0xsAK1G7wGoYQGEzRENvy3qfgN4telRguNkAPX9YTmUysjgJjZ9qMRSMtlwqUknM4Z_ebeyULlqZ5GvJl2A8rQp1R0Z5NSg6SgivJSJvbkp9TYW7EgoJw4Y"/>
+</div>
+<div>
+<p class="font-h3 text-[14px] text-on-surface">Dr. Researcher</p>
+<p class="text-[12px] text-emerald-700/70">Tests Module Active</p>
+</div>
+</div>
+<div class="flex flex-col gap-1 grow">
+<a class="text-[#4ADE80] bg-emerald-400/5 border-r-2 border-[#4ADE80] flex items-center gap-3 px-6 py-4 cursor-pointer transition-transform duration-150 ease-in-out" href="#">
+<span class="material-symbols-outlined">grid_view</span>
+<span class="font-['Plus_Jakarta_Sans'] text-sm font-medium">Hub</span>
+</a>
+<a class="text-emerald-700/70 flex items-center gap-3 px-6 py-4 hover:bg-[#1C2622] hover:text-[#4ADE80] transition-all cursor-pointer transition-transform duration-150 ease-in-out" href="#">
+<span class="material-symbols-outlined">quiz</span>
+<span class="font-['Plus_Jakarta_Sans'] text-sm font-medium">Tests</span>
+</a>
+<a class="text-emerald-700/70 flex items-center gap-3 px-6 py-4 hover:bg-[#1C2622] hover:text-[#4ADE80] transition-all cursor-pointer transition-transform duration-150 ease-in-out" href="#">
+<span class="material-symbols-outlined">person</span>
+<span class="font-['Plus_Jakarta_Sans'] text-sm font-medium">Profile</span>
+</a>
+<a class="text-emerald-700/70 flex items-center gap-3 px-6 py-4 hover:bg-[#1C2622] hover:text-[#4ADE80] transition-all cursor-pointer transition-transform duration-150 ease-in-out" href="#">
+<span class="material-symbols-outlined">settings</span>
+<span class="font-['Plus_Jakarta_Sans'] text-sm font-medium">Settings</span>
+</a>
+</div>
+<div class="px-6 mt-auto">
+<button class="w-full py-3 px-4 border border-[#4ADE80] text-[#4ADE80] rounded-lg font-label-caps text-xs flex items-center justify-center gap-2 hover:bg-[#4ADE80]/10 transition-colors">
+<span class="material-symbols-outlined text-sm">visibility_off</span>
+                    Distraction-Free Mode
+                </button>
+</div>
+</aside>
+<!-- Main Content Area -->
+<main class="flex-1 md:ml-64 p-container-padding">
+<!-- Hero Header Section -->
+<section class="mb-stack-lg max-w-5xl mx-auto pt-8">
+<div class="mb-4">
+<span class="font-label-caps text-primary tracking-widest">WITAJ PONOWNIE</span>
+<h1 class="font-h1 text-on-surface mt-2">Testy</h1>
+<p class="font-body-lg text-on-surface-variant max-w-2xl mt-4">Zweryfikuj swoją wiedzę na podstawie wgranych materiałów. EduMelon analizuje Twoje pliki i generuje spersonalizowane zestawy pytań klinicznych.</p>
+</div>
+<div class="flex flex-wrap items-center gap-4 mt-8">
+<div class="relative flex-1 min-w-[300px]">
+<span class="material-symbols-outlined absolute left-4 top-1/2 -translate-y-1/2 text-outline">search</span>
+<input class="w-full bg-surface-container-lowest border border-outline-variant rounded-xl py-3 pl-12 pr-4 focus:border-primary outline-none text-on-surface transition-all" placeholder="Szukaj materiałów lub tematów..." type="text"/>
+</div>
+<button class="bg-primary text-on-primary-fixed px-6 py-3 rounded-xl font-h3 text-sm flex items-center gap-2 hover:opacity-90 transition-opacity">
+<span class="material-symbols-outlined">upload_file</span>
+                        Wgraj nowe materiały
+                    </button>
+</div>
+</section>
+<!-- Bento Grid of Tests -->
+<section class="max-w-5xl mx-auto grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+<!-- Card 1: Populated -->
+<article class="bg-[#141B18] border border-[#212C28] rounded-[24px] p-container-padding group hover:border-[#4ADE80]/30 transition-all duration-300">
+<div class="flex justify-between items-start mb-6">
+<div class="w-12 h-12 bg-primary-container/10 rounded-xl flex items-center justify-center text-primary">
+<span class="material-symbols-outlined text-[28px]">description</span>
+</div>
+<span class="px-3 py-1 bg-primary/10 text-primary text-[10px] font-bold uppercase rounded-full">Kardiologia / PDF</span>
+</div>
+<h3 class="font-h3 text-xl text-on-surface mb-2 group-hover:text-primary transition-colors">Anatomia Serca - Wykład 1</h3>
+<p class="text-on-surface-variant text-sm mb-8 line-clamp-2">Szczegółowa analiza budowy komór, przedsionków oraz zastawek w kontekście patologii hemodynamicznych.</p>
+<div class="flex items-center justify-between pt-6 border-t border-[#212C28]">
+<div class="flex items-center gap-2">
+<span class="material-symbols-outlined text-primary text-sm">check_circle</span>
+<span class="font-data-mono text-primary text-xs uppercase">40 pytań gotowych</span>
+</div>
+<button class="bg-[#4ADE80] text-[#0A0F0D] px-4 py-2 rounded-lg font-bold text-sm hover:scale-[1.02] active:scale-95 transition-all">
+                            Otwórz test
+                        </button>
+</div>
+</article>
+<!-- Card 2: Populated -->
+<article class="bg-[#141B18] border border-[#212C28] rounded-[24px] p-container-padding group hover:border-[#4ADE80]/30 transition-all duration-300">
+<div class="flex justify-between items-start mb-6">
+<div class="w-12 h-12 bg-primary-container/10 rounded-xl flex items-center justify-center text-primary">
+<span class="material-symbols-outlined text-[28px]">neurology</span>
+</div>
+<span class="px-3 py-1 bg-primary/10 text-primary text-[10px] font-bold uppercase rounded-full">Neurologia / PPTX</span>
+</div>
+<h3 class="font-h3 text-xl text-on-surface mb-2 group-hover:text-primary transition-colors">Neurotransmisja Synaptyczna</h3>
+<p class="text-on-surface-variant text-sm mb-8 line-clamp-2">Podstawowe mechanizmy uwalniania neuroprzekaźników i receptory jonotropowe.</p>
+<div class="flex items-center justify-between pt-6 border-t border-[#212C28]">
+<div class="flex items-center gap-2">
+<span class="material-symbols-outlined text-primary text-sm">check_circle</span>
+<span class="font-data-mono text-primary text-xs uppercase">25 pytań gotowych</span>
+</div>
+<button class="bg-[#4ADE80] text-[#0A0F0D] px-4 py-2 rounded-lg font-bold text-sm hover:scale-[1.02] active:scale-95 transition-all">
+                            Otwórz test
+                        </button>
+</div>
+</article>
+<!-- Card 3: Loading State -->
+<article class="bg-[#141B18] border border-[#212C28] rounded-[24px] p-container-padding relative overflow-hidden">
+<div class="absolute inset-0 bg-gradient-to-r from-transparent via-white/[0.03] to-transparent -translate-x-full animate-[shimmer_2s_infinite]"></div>
+<div class="flex justify-between items-start mb-6">
+<div class="w-12 h-12 bg-surface-container-highest rounded-xl flex items-center justify-center text-outline">
+<span class="material-symbols-outlined text-[28px]">pending</span>
+</div>
+<span class="px-3 py-1 bg-surface-container-highest text-outline text-[10px] font-bold uppercase rounded-full">Przetwarzanie...</span>
+</div>
+<h3 class="font-h3 text-xl text-on-surface mb-2">Farmakologia Kliniczna</h3>
+<p class="text-on-surface-variant text-sm mb-8">System generuje pytania na podstawie wgranego skryptu. Może to zająć do 2 minut.</p>
+<div class="flex flex-col gap-3 pt-6 border-t border-[#212C28]">
+<div class="w-full bg-surface-container-highest h-2 rounded-full overflow-hidden">
+<div class="bg-primary h-full w-[65%]"></div>
+</div>
+<div class="flex justify-between">
+<span class="font-data-mono text-outline text-[10px] uppercase">Analiza tekstu (65%)</span>
+<span class="font-data-mono text-primary text-[10px]">CZEKAJ...</span>
+</div>
+</div>
+</article>
+<!-- Card 4: Populated -->
+<article class="bg-[#141B18] border border-[#212C28] rounded-[24px] p-container-padding group hover:border-[#4ADE80]/30 transition-all duration-300">
+<div class="flex justify-between items-start mb-6">
+<div class="w-12 h-12 bg-primary-container/10 rounded-xl flex items-center justify-center text-primary">
+<span class="material-symbols-outlined text-[28px]">microbiology</span>
+</div>
+<span class="px-3 py-1 bg-primary/10 text-primary text-[10px] font-bold uppercase rounded-full">Mikrobiologia / PDF</span>
+</div>
+<h3 class="font-h3 text-xl text-on-surface mb-2 group-hover:text-primary transition-colors">Bakterie G+ tlenowe</h3>
+<p class="text-on-surface-variant text-sm mb-8 line-clamp-2">Charakterystyka Staphylococcus i Streptococcus w diagnostyce laboratoryjnej.</p>
+<div class="flex items-center justify-between pt-6 border-t border-[#212C28]">
+<div class="flex items-center gap-2">
+<span class="material-symbols-outlined text-primary text-sm">check_circle</span>
+<span class="font-data-mono text-primary text-xs uppercase">52 pytania gotowe</span>
+</div>
+<button class="bg-[#4ADE80] text-[#0A0F0D] px-4 py-2 rounded-lg font-bold text-sm hover:scale-[1.02] active:scale-95 transition-all">
+                            Otwórz test
+                        </button>
+</div>
+</article>
+<!-- Card 5: Empty/Action Required State -->
+<article class="bg-[#141B18]/50 border border-dashed border-[#212C28] rounded-[24px] p-container-padding flex flex-col items-center justify-center text-center group hover:border-primary/50 transition-all cursor-pointer">
+<div class="w-16 h-16 bg-surface-container-highest rounded-full flex items-center justify-center text-outline mb-4 group-hover:bg-primary/10 group-hover:text-primary transition-all">
+<span class="material-symbols-outlined text-[32px]">add</span>
+</div>
+<p class="font-h3 text-lg text-on-surface mb-1">Brak testu</p>
+<p class="text-sm text-on-surface-variant mb-6 px-4">Wgraj notatki z zajęć, aby wygenerować pierwszy zestaw pytań.</p>
+<button class="text-primary font-label-caps text-xs flex items-center gap-2">
+                        WYBIERZ PLIK <span class="material-symbols-outlined text-sm">chevron_right</span>
+</button>
+</article>
+<!-- Featured Card: Premium Layout -->
+<article class="md:col-span-2 lg:col-span-1 bg-gradient-to-br from-[#141B18] to-[#1C2622] border border-[#4ADE80]/20 rounded-[24px] p-container-padding relative overflow-hidden">
+<div class="absolute top-0 right-0 w-32 h-32 bg-primary/5 blur-[60px] rounded-full"></div>
+<div class="relative z-10">
+<div class="flex items-center gap-2 mb-6">
+<span class="material-symbols-outlined text-primary">auto_awesome</span>
+<span class="font-label-caps text-primary text-[10px] tracking-widest uppercase">Rekomendowane przez AI</span>
+</div>
+<h3 class="font-h3 text-2xl text-on-surface mb-4">Przygotowanie do Egzaminu Końcowego</h3>
+<p class="text-on-surface-variant text-sm mb-10">Zestawienie wszystkich materiałów z całego semestru w jeden kompleksowy test symulacyjny.</p>
+<div class="space-y-4 mb-8">
+<div class="flex items-center gap-3">
+<div class="w-8 h-8 rounded-lg bg-primary/10 flex items-center justify-center text-primary">
+<span class="material-symbols-outlined text-sm">all_inclusive</span>
+</div>
+<span class="text-sm text-on-surface">150 pytań mieszanych</span>
+</div>
+<div class="flex items-center gap-3">
+<div class="w-8 h-8 rounded-lg bg-primary/10 flex items-center justify-center text-primary">
+<span class="material-symbols-outlined text-sm">schedule</span>
+</div>
+<span class="text-sm text-on-surface">Czas trwania: 90 min</span>
+</div>
+</div>
+<button class="w-full bg-primary text-on-primary-fixed py-4 rounded-xl font-bold flex items-center justify-center gap-3 hover:opacity-90 transition-opacity">
+                            Rozpocznij Symulację
+                            <span class="material-symbols-outlined">rocket_launch</span>
+</button>
+</div>
+</article>
+</section>
+</main>
+</div>
+<!-- Background Decoration -->
+<div class="fixed top-0 right-0 -z-10 w-[50vw] h-[50vw] bg-primary/5 blur-[120px] rounded-full opacity-30 pointer-events-none"></div>
+<div class="fixed bottom-0 left-0 -z-10 w-[30vw] h-[30vw] bg-emerald-900/10 blur-[100px] rounded-full opacity-20 pointer-events-none"></div>
+</body></html>

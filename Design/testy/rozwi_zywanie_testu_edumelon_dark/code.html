@@ -1,0 +1,228 @@
+<!DOCTYPE html>
+
+<html class="dark" lang="pl"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>EduMelon - Tryb Rozwiązywania Testu</title>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&amp;family=Inter:wght@400;500;600&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<script id="tailwind-config">
+        tailwind.config = {
+            darkMode: "class",
+            theme: {
+                extend: {
+                    "colors": {
+                        "on-error-container": "#ffdad6",
+                        "surface-container": "#1c211e",
+                        "tertiary": "#ffd6d9",
+                        "on-secondary": "#2b322f",
+                        "tertiary-fixed-dim": "#ffb2b9",
+                        "outline-variant": "#3d4a3e",
+                        "error-container": "#93000a",
+                        "surface-dim": "#0f1412",
+                        "secondary-container": "#434b47",
+                        "on-background": "#dfe4e0",
+                        "on-secondary-fixed-variant": "#414845",
+                        "surface-variant": "#313633",
+                        "surface": "#0f1412",
+                        "primary-container": "#4ade80",
+                        "on-tertiary": "#67001f",
+                        "surface-container-lowest": "#0a0f0d",
+                        "on-primary-fixed-variant": "#005227",
+                        "inverse-surface": "#dfe4e0",
+                        "on-secondary-container": "#b3bab5",
+                        "on-primary-container": "#005e2d",
+                        "surface-container-low": "#181d1a",
+                        "on-tertiary-fixed": "#400010",
+                        "primary-fixed-dim": "#4de082",
+                        "on-tertiary-container": "#97253c",
+                        "inverse-on-surface": "#2c322f",
+                        "tertiary-container": "#ffafb7",
+                        "on-error": "#690005",
+                        "tertiary-fixed": "#ffdadc",
+                        "on-primary": "#003919",
+                        "surface-container-high": "#262b29",
+                        "on-surface": "#dfe4e0",
+                        "secondary-fixed-dim": "#c1c8c3",
+                        "primary-fixed": "#6dfe9c",
+                        "primary": "#6bfb9a",
+                        "surface-tint": "#4de082",
+                        "error": "#ffb4ab",
+                        "secondary-fixed": "#dde4df",
+                        "background": "#0f1412",
+                        "secondary": "#c1c8c3",
+                        "on-secondary-fixed": "#161d1a",
+                        "surface-bright": "#353a38",
+                        "on-primary-fixed": "#00210c",
+                        "on-tertiary-fixed-variant": "#891933",
+                        "inverse-primary": "#006d36",
+                        "outline": "#869486"
+                    },
+                    "borderRadius": {
+                        "DEFAULT": "0.25rem",
+                        "lg": "0.5rem",
+                        "xl": "0.75rem",
+                        "full": "9999px"
+                    },
+                    "spacing": {
+                        "stack-md": "16px",
+                        "stack-lg": "32px",
+                        "gutter": "16px",
+                        "container-padding": "24px",
+                        "unit": "8px",
+                        "stack-sm": "8px"
+                    },
+                    "fontFamily": {
+                        "label-caps": ["Inter"],
+                        "data-mono": ["monospace"],
+                        "body-sm": ["Inter"],
+                        "body-lg": ["Inter"],
+                        "h2": ["Plus Jakarta Sans"],
+                        "h3": ["Plus Jakarta Sans"],
+                        "h1": ["Plus Jakarta Sans"],
+                        "body-md": ["Inter"]
+                    },
+                    "fontSize": {
+                        "label-caps": ["12px", {"lineHeight": "1.0", "letterSpacing": "0.05em", "fontWeight": "600"}],
+                        "data-mono": ["14px", {"lineHeight": "1.0", "fontWeight": "500"}],
+                        "body-sm": ["14px", {"lineHeight": "1.5", "fontWeight": "400"}],
+                        "body-lg": ["18px", {"lineHeight": "1.6", "fontWeight": "400"}],
+                        "h2": ["32px", {"lineHeight": "1.3", "letterSpacing": "-0.01em", "fontWeight": "600"}],
+                        "h3": ["24px", {"lineHeight": "1.4", "fontWeight": "600"}],
+                        "h1": ["40px", {"lineHeight": "1.2", "letterSpacing": "-0.02em", "fontWeight": "700"}],
+                        "body-md": ["16px", {"lineHeight": "1.6", "fontWeight": "400"}]
+                    }
+                },
+            },
+        }
+    </script>
+<style>
+        .material-symbols-outlined {
+            font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24;
+        }
+        body {
+            background-color: #0A0F0D;
+        }
+    </style>
+</head>
+<body class="font-body-md text-on-surface antialiased overflow-hidden">
+<!-- TopAppBar -->
+<header class="bg-[#0A0F0D] dark:bg-[#0A0F0D] flex justify-between items-center w-full px-8 h-16 sticky top-0 z-50 border-b border-[#212C28] font-['Plus_Jakarta_Sans'] antialiased">
+<div class="flex items-center gap-6">
+<span class="text-xl font-black tracking-tighter text-[#4ADE80]">EduMelon</span>
+<div class="h-6 w-px bg-outline-variant"></div>
+<div class="flex flex-col">
+<span class="font-h3 text-body-sm text-on-surface">Kardiologia: Patofizjologia krążenia</span>
+<span class="font-label-caps text-label-caps text-primary">Pytanie 4/40</span>
+</div>
+</div>
+<div class="flex-1 max-w-xl mx-12">
+<div class="w-full h-1.5 bg-surface-container rounded-full overflow-hidden">
+<div class="w-[10%] h-full bg-primary-container"></div>
+</div>
+</div>
+<div class="flex items-center gap-4">
+<div class="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-surface-container-high">
+<span class="material-symbols-outlined text-primary text-[20px]" data-icon="timer">timer</span>
+<span class="font-data-mono text-data-mono text-primary">12:45</span>
+</div>
+<button class="hover:text-[#4ADE80] transition-colors duration-200 scale-98 active:opacity-80">
+<span class="material-symbols-outlined" data-icon="visibility_off">visibility_off</span>
+</button>
+<button class="hover:text-[#4ADE80] transition-colors duration-200 scale-98 active:opacity-80">
+<span class="material-symbols-outlined" data-icon="account_circle" data-weight="fill" style="font-variation-settings: 'FILL' 1;">account_circle</span>
+</button>
+</div>
+</header>
+<main class="flex h-[calc(100vh-64px)]">
+<!-- SideNavBar / Tryb Testu -->
+<aside class="bg-[#141B18] dark:bg-[#141B18] fixed left-0 top-16 h-[calc(100vh-64px)] w-64 border-r border-[#212C28] flex flex-col py-8 font-['Plus_Jakarta_Sans'] text-sm font-medium">
+<div class="px-6 mb-8">
+<span class="font-label-caps text-label-caps text-outline uppercase tracking-widest">Tryb testu</span>
+</div>
+<nav class="flex flex-col gap-1">
+<div class="text-[#4ADE80] bg-emerald-400/5 border-r-2 border-[#4ADE80] flex items-center gap-3 px-6 py-4 cursor-pointer transition-transform duration-150 ease-in-out">
+<span class="material-symbols-outlined" data-icon="grid_view">grid_view</span>
+<span>Rozwiąż cały</span>
+</div>
+<div class="text-emerald-700/70 flex items-center gap-3 px-6 py-4 cursor-pointer hover:bg-[#1C2622] hover:text-[#4ADE80] transition-all">
+<span class="material-symbols-outlined" data-icon="error_outline">error_outline</span>
+<span>Tylko błędne</span>
+</div>
+<div class="text-emerald-700/70 flex items-center gap-3 px-6 py-4 cursor-pointer hover:bg-[#1C2622] hover:text-[#4ADE80] transition-all">
+<span class="material-symbols-outlined" data-icon="star">star</span>
+<span>Ulubione</span>
+</div>
+<div class="text-emerald-700/70 flex items-center gap-3 px-6 py-4 cursor-pointer hover:bg-[#1C2622] hover:text-[#4ADE80] transition-all">
+<span class="material-symbols-outlined" data-icon="history">history</span>
+<span>Ostatnie podejście</span>
+</div>
+</nav>
+<div class="mt-auto px-6">
+<button class="w-full bg-surface-container-high hover:bg-surface-container-highest text-primary border border-primary/20 py-3 rounded-xl font-label-caps transition-all flex items-center justify-center gap-2">
+<span class="material-symbols-outlined text-[18px]" data-icon="bolt">bolt</span>
+                    Distraction-Free Mode
+                </button>
+</div>
+</aside>
+<!-- Central Question Content -->
+<section class="ml-64 flex-1 overflow-y-auto bg-surface-container-lowest flex flex-col items-center">
+<div class="max-w-4xl w-full px-container-padding py-12 flex flex-col gap-10">
+<!-- Question Card -->
+<div class="bg-[#141B18] rounded-[24px] border border-[#212C28] p-10 flex flex-col gap-8">
+<div class="flex justify-between items-start">
+<span class="font-label-caps text-label-caps text-outline uppercase">Pytanie 04</span>
+<span class="font-label-caps text-label-caps text-outline px-3 py-1 bg-surface-container rounded-full border border-outline-variant">Strona 12</span>
+</div>
+<h2 class="font-h2 text-h2 text-on-surface">Który z wymienionych mechanizmów kompensacyjnych jest najbardziej charakterystyczny dla wczesnej fazy niewydolności lewokomorowej serca?</h2>
+<div class="relative w-full aspect-[21/9] rounded-xl overflow-hidden border border-outline-variant">
+<img class="w-full h-full object-cover grayscale opacity-80" data-alt="Technical medical diagram showing cardiac cycle curves with high contrast green and red lines on dark background" src="https://lh3.googleusercontent.com/aida-public/AB6AXuDGplj39N0oMRYOmmj7HcGtKQWwObzMB7UrjD-4PTUIJsFUX8sa8KpGRtX5wZpZD5wKk8m9t2HQDtb6LEYp3dzHKSFcKo1yZfJoNN9lzyB520rHs5bo6qtoZNZ4YtVsRhiu2gSykJ01zfcWQjIeUP4qu2-snUZXOXiMpVCwpoHdniNasa3d0vvUipKEzo_KALvkznb-ab6FJ5SIUDu2ek4koAcZ8ObC1cL7rGtBP0HjRGHEXbbru5WmjQRm12NaJMLWYMA6LMDAoDU"/>
+<div class="absolute inset-0 bg-gradient-to-t from-[#141B18] via-transparent to-transparent"></div>
+</div>
+</div>
+<!-- Answer Tiles Grid -->
+<div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+<button class="group relative flex items-center gap-6 p-6 bg-[#141B18] border border-[#212C28] rounded-[24px] text-left hover:border-[#4ADE80] hover:bg-[#1C2622] transition-all scale-98 active:opacity-80">
+<div class="w-12 h-12 flex items-center justify-center rounded-full border-2 border-outline-variant group-hover:border-[#4ADE80] group-hover:bg-[#4ADE80]/10 text-outline group-hover:text-[#4ADE80] font-h3 transition-all">A</div>
+<span class="font-body-md text-on-surface flex-1">Zmniejszenie aktywności układu renina-angiotensyna-aldosteron.</span>
+</button>
+<button class="group relative flex items-center gap-6 p-6 bg-emerald-400/10 border-2 border-[#4ADE80] rounded-[24px] text-left scale-98 active:opacity-80 shadow-[0_0_20px_rgba(74,222,128,0.1)]">
+<div class="w-12 h-12 flex items-center justify-center rounded-full bg-[#4ADE80] text-[#0A0F0D] font-h3 transition-all">B</div>
+<span class="font-body-md text-on-surface flex-1">Zwiększenie napięcia układu współczulnego i tachykardia.</span>
+<span class="material-symbols-outlined text-[#4ADE80]" data-icon="check_circle" data-weight="fill" style="font-variation-settings: 'FILL' 1;">check_circle</span>
+</button>
+<button class="group relative flex items-center gap-6 p-6 bg-[#141B18] border border-[#212C28] rounded-[24px] text-left hover:border-[#4ADE80] hover:bg-[#1C2622] transition-all scale-98 active:opacity-80">
+<div class="w-12 h-12 flex items-center justify-center rounded-full border-2 border-outline-variant group-hover:border-[#4ADE80] group-hover:bg-[#4ADE80]/10 text-outline group-hover:text-[#4ADE80] font-h3 transition-all">C</div>
+<span class="font-body-md text-on-surface flex-1">Uogólniony rozkurcz naczyń krwionośnych obwodowych.</span>
+</button>
+<button class="group relative flex items-center gap-6 p-6 bg-[#141B18] border border-[#212C28] rounded-[24px] text-left hover:border-[#4ADE80] hover:bg-[#1C2622] transition-all scale-98 active:opacity-80">
+<div class="w-12 h-12 flex items-center justify-center rounded-full border-2 border-outline-variant group-hover:border-[#4ADE80] group-hover:bg-[#4ADE80]/10 text-outline group-hover:text-[#4ADE80] font-h3 transition-all">D</div>
+<span class="font-body-md text-on-surface flex-1">Hamowanie uwalniania hormonu antydiuretycznego (ADH).</span>
+</button>
+</div>
+<!-- Spacing for footer -->
+<div class="h-32"></div>
+</div>
+</section>
+</main>
+<!-- Navigation Footer -->
+<footer class="fixed bottom-0 left-0 w-full h-24 bg-[#0A0F0D] border-t border-[#212C28] flex items-center px-8 z-50">
+<div class="flex-1 flex gap-4">
+<button class="flex items-center gap-2 px-6 py-3 rounded-xl border border-[#212C28] text-on-surface hover:bg-surface-container transition-all">
+<span class="material-symbols-outlined" data-icon="arrow_back">arrow_back</span>
+<span class="font-label-caps">Poprzednie</span>
+</button>
+<button class="flex items-center gap-2 px-8 py-3 rounded-xl bg-primary text-on-primary-fixed font-bold hover:brightness-110 transition-all shadow-lg shadow-primary/20">
+<span class="font-label-caps">Następne</span>
+<span class="material-symbols-outlined" data-icon="arrow_forward">arrow_forward</span>
+</button>
+</div>
+<div class="flex gap-4">
+<button class="px-6 py-3 rounded-xl border border-error/30 text-error hover:bg-error/10 transition-all font-label-caps">
+                Zakończ test
+            </button>
+</div>
+</footer>
+</body></html>

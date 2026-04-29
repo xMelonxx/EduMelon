@@ -1,0 +1,63 @@
+/** @type {import('tailwindcss').Config} */
+export default {
+  darkMode: "class",
+  content: ["./index.html", "./src/**/*.{js,ts,jsx,tsx}"],
+  theme: {
+    extend: {
+      colors: {
+        surface: "var(--c-surface)",
+        background: "var(--c-surface)",
+        "on-surface": "var(--c-on-surface)",
+        "on-background": "var(--c-on-surface)",
+        "on-surface-variant": "var(--c-on-surface-variant)",
+        "surface-container-low": "var(--c-surface-container-low)",
+        "surface-container": "var(--c-surface-container)",
+        "surface-container-high": "var(--c-surface-container-high)",
+        "surface-container-highest": "var(--c-surface-container-highest)",
+        "surface-container-lowest": "var(--c-surface-container-lowest)",
+        primary: "var(--c-primary)",
+        "primary-container": "var(--c-primary-container)",
+        "on-primary": "var(--c-on-primary)",
+        secondary: "var(--c-secondary)",
+        "secondary-container": "var(--c-secondary-container)",
+        "on-secondary-container": "var(--c-on-secondary-container)",
+        tertiary: "var(--c-tertiary)",
+        outline: "var(--c-outline)",
+        "outline-variant": "var(--c-outline-variant)",
+        error: "var(--c-error)",
+      },
+      borderRadius: {
+        xl: "1.5rem",
+        "2xl": "2rem",
+        "3xl": "3rem",
+      },
+      fontFamily: {
+        sans: ["Plus Jakarta Sans", "system-ui", "sans-serif"],
+        heading: ["Plus Jakarta Sans", "system-ui", "sans-serif"],
+        mono: ["monospace"],
+      },
+      fontSize: {
+        h1: ["40px", { lineHeight: "1.2", letterSpacing: "-0.02em", fontWeight: "700" }],
+        h2: ["32px", { lineHeight: "1.3", letterSpacing: "-0.01em", fontWeight: "600" }],
+        h3: ["24px", { lineHeight: "1.4", fontWeight: "600" }],
+        "body-lg": ["18px", { lineHeight: "1.6", fontWeight: "400" }],
+        "body-md": ["16px", { lineHeight: "1.6", fontWeight: "400" }],
+        "body-sm": ["14px", { lineHeight: "1.5", fontWeight: "400" }],
+        "label-caps": ["12px", { lineHeight: "1.0", letterSpacing: "0.05em", fontWeight: "600" }],
+        "data-mono": ["14px", { lineHeight: "1.0", fontWeight: "500" }],
+      },
+      spacing: {
+        "stack-sm": "8px",
+        "stack-md": "16px",
+        "stack-lg": "32px",
+        gutter: "16px",
+        "container-padding": "24px",
+      },
+      boxShadow: {
+        melon: "var(--shadow-melon)",
+        melonLg: "var(--shadow-melon-lg)",
+      },
+    },
+  },
+  plugins: [],
+};

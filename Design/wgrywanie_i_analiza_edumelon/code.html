@@ -1,0 +1,301 @@
+<!DOCTYPE html>
+
+<html class="light" lang="en"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>EduMelon | Upload &amp; Analysis</title>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@300;400;500;600;700;800&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<script id="tailwind-config">
+        tailwind.config = {
+            darkMode: "class",
+            theme: {
+                extend: {
+                    "colors": {
+                        "on-primary-fixed-variant": "#8a1925",
+                        "secondary-fixed": "#aef2c4",
+                        "on-tertiary": "#ffffff",
+                        "surface-container-highest": "#dfe3e0",
+                        "outline-variant": "#dfbfbe",
+                        "on-secondary-container": "#30704c",
+                        "error-container": "#ffdad6",
+                        "surface-container-lowest": "#ffffff",
+                        "surface-tint": "#ab323a",
+                        "on-surface-variant": "#584141",
+                        "surface-container-high": "#e5e9e5",
+                        "background": "#f6faf6",
+                        "on-surface": "#181d1a",
+                        "on-background": "#181d1a",
+                        "surface": "#f6faf6",
+                        "on-secondary-fixed-variant": "#095230",
+                        "on-primary-fixed": "#410008",
+                        "surface-container": "#ebefeb",
+                        "inverse-surface": "#2d312f",
+                        "tertiary-fixed-dim": "#c1c8c7",
+                        "surface-dim": "#d7dbd7",
+                        "primary": "#ab323a",
+                        "on-tertiary-container": "#2f3636",
+                        "secondary-container": "#aef2c4",
+                        "inverse-on-surface": "#eef2ee",
+                        "on-error-container": "#93000a",
+                        "on-secondary": "#ffffff",
+                        "tertiary": "#596060",
+                        "on-secondary-fixed": "#002110",
+                        "error": "#ba1a1a",
+                        "primary-fixed": "#ffdad9",
+                        "secondary": "#296a46",
+                        "tertiary-fixed": "#dde4e3",
+                        "surface-bright": "#f6faf6",
+                        "secondary-fixed-dim": "#92d5a9",
+                        "surface-container-low": "#f1f5f1",
+                        "on-tertiary-fixed-variant": "#414848",
+                        "surface-variant": "#dfe3e0",
+                        "on-primary": "#ffffff",
+                        "on-primary-container": "#710116",
+                        "inverse-primary": "#ffb3b2",
+                        "primary-container": "#ff7074",
+                        "on-tertiary-fixed": "#161d1d",
+                        "on-error": "#ffffff",
+                        "outline": "#8b7170",
+                        "primary-fixed-dim": "#ffb3b2",
+                        "tertiary-container": "#989f9f"
+                    },
+                    "borderRadius": {
+                        "DEFAULT": "1rem",
+                        "lg": "2rem",
+                        "xl": "3rem",
+                        "full": "9999px"
+                    },
+                    "fontFamily": {
+                        "headline": ["Plus Jakarta Sans"],
+                        "body": ["Plus Jakarta Sans"],
+                        "label": ["Plus Jakarta Sans"]
+                    }
+                },
+            },
+        }
+    </script>
+<style>
+        body { font-family: 'Plus Jakarta Sans', sans-serif; }
+        .material-symbols-outlined {
+            font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24;
+        }
+        .melon-gradient {
+            background: linear-gradient(135deg, #ab323a 0%, #ff7074 100%);
+        }
+        .glass-panel {
+            background: rgba(246, 250, 246, 0.8);
+            backdrop-filter: blur(20px);
+        }
+    </style>
+</head>
+<body class="bg-surface text-on-surface min-h-screen flex">
+<!-- SideNavBar Anchor -->
+<aside class="h-screen w-64 rounded-r-3xl bg-surface-container-low flex flex-col py-6 space-y-2 border-r-0 shadow-[0_12px_32px_rgba(171,50,58,0.08)] sticky top-0">
+<div class="px-6 mb-8">
+<div class="flex items-center gap-3">
+<div class="w-10 h-10 rounded-full bg-primary flex items-center justify-center text-white">
+<span class="material-symbols-outlined" data-icon="school">school</span>
+</div>
+<div>
+<h1 class="text-xl font-extrabold text-rose-600">EduMelon</h1>
+<p class="text-[10px] font-semibold uppercase tracking-widest text-zinc-500">AI Study Companion</p>
+</div>
+</div>
+</div>
+<nav class="flex-1 flex flex-col gap-1">
+<a class="flex items-center gap-3 text-zinc-600 px-4 py-3 mx-2 hover:bg-rose-50 rounded-full transition-all" href="#">
+<span class="material-symbols-outlined" data-icon="book_2">book_2</span>
+<span class="text-sm font-semibold uppercase tracking-widest">My Library</span>
+</a>
+<a class="flex items-center gap-3 text-zinc-600 px-4 py-3 mx-2 hover:bg-rose-50 rounded-full transition-all" href="#">
+<span class="material-symbols-outlined" data-icon="style">style</span>
+<span class="text-sm font-semibold uppercase tracking-widest">Flashcards</span>
+</a>
+<a class="flex items-center gap-3 text-zinc-600 px-4 py-3 mx-2 hover:bg-rose-50 rounded-full transition-all" href="#">
+<span class="material-symbols-outlined" data-icon="calendar_today">calendar_today</span>
+<span class="text-sm font-semibold uppercase tracking-widest">Schedule</span>
+</a>
+<a class="flex items-center gap-3 text-zinc-600 px-4 py-3 mx-2 hover:bg-rose-50 rounded-full transition-all" href="#">
+<span class="material-symbols-outlined" data-icon="settings">settings</span>
+<span class="text-sm font-semibold uppercase tracking-widest">Settings</span>
+</a>
+</nav>
+<div class="px-4 mt-auto">
+<button class="w-full melon-gradient text-white rounded-full py-4 font-bold text-sm shadow-lg hover:scale-[1.02] transition-transform">
+                Upgrade to Pro
+            </button>
+</div>
+</aside>
+<main class="flex-1 flex flex-col">
+<!-- TopNavBar Anchor -->
+<header class="flex justify-between items-center px-8 h-16 w-full sticky top-0 z-50 bg-surface backdrop-blur-xl bg-opacity-80">
+<div class="flex items-center gap-4 flex-1 max-w-xl">
+<div class="w-full bg-surface-container-high rounded-full px-4 py-2 flex items-center gap-3 group focus-within:bg-surface-container-lowest transition-all ring-1 ring-transparent focus-within:ring-primary/20">
+<span class="material-symbols-outlined text-on-surface-variant" data-icon="search">search</span>
+<input class="bg-transparent border-none focus:ring-0 text-sm w-full font-medium text-on-surface-variant" placeholder="Search your library..." type="text"/>
+</div>
+</div>
+<div class="flex items-center gap-6 ml-8">
+<button class="text-on-surface-variant hover:text-primary transition-colors">
+<span class="material-symbols-outlined" data-icon="notifications">notifications</span>
+</button>
+<div class="flex items-center gap-3 bg-surface-container-low px-3 py-1.5 rounded-full">
+<img alt="Student Profile" class="w-8 h-8 rounded-full object-cover" data-alt="Close up portrait of a smiling college student with glasses in a sunlit university library setting" src="https://lh3.googleusercontent.com/aida-public/AB6AXuA5ynGTGAk8kl5cDMdJiMfY5T6Ol-Rlx0Lz8QcVA8iBeQCrvWUw0oTkibj1wt0xQND-GOhfLFgnOBvS09mr3otW2bN80bR28jNDCkkja2rajgbNZAS4GnV56vpz5lZa5SgXaOIpXt_vo1M68Mr4MnAW2VfKgm2SCrVpIHriLb5fTG3MgfAagD_upKcTnX-vWcr2xhXQpYRqyff3TMOdydeS6enQJbPbaWaT0E-dLHcc4vmmOhT980q7RSaSuDIDbcmvdL5cIjaBVn4"/>
+<span class="text-sm font-bold text-on-surface-variant">Alex Rivers</span>
+</div>
+</div>
+</header>
+<!-- Main Content Canvas -->
+<div class="p-10 max-w-6xl mx-auto w-full space-y-12">
+<!-- Header Section -->
+<section class="space-y-2">
+<h2 class="text-4xl font-extrabold tracking-tight text-on-surface">Grow Your Knowledge</h2>
+<p class="text-on-surface-variant text-lg">Upload your lecture materials and let our AI transform them into study pods.</p>
+</section>
+<!-- Upload & Analysis Grid -->
+<div class="grid grid-cols-1 gap-8">
+<!-- Large Central Dropzone -->
+<div class="relative group">
+<!-- Decorative Background Element -->
+<div class="absolute -inset-1 melon-gradient opacity-10 blur-xl rounded-xl group-hover:opacity-20 transition-opacity"></div>
+<div class="relative bg-surface-container-lowest rounded-xl border-2 border-dashed border-outline-variant p-20 flex flex-col items-center justify-center text-center transition-all hover:bg-surface-container-low">
+<div class="w-24 h-24 rounded-full bg-secondary-container flex items-center justify-center mb-6">
+<span class="material-symbols-outlined text-on-secondary-container text-4xl" data-icon="cloud_upload">cloud_upload</span>
+</div>
+<h3 class="text-2xl font-bold text-on-surface mb-2">Drop your presentation files here</h3>
+<p class="text-on-surface-variant mb-8 max-w-md">Drag and drop PDF or PPTX files from your computer to start the AI analysis.</p>
+<button class="px-8 py-3 bg-on-surface text-white rounded-full font-bold hover:scale-105 active:scale-95 transition-all">
+                            Browse Files
+                        </button>
+<div class="mt-8 flex gap-4">
+<div class="flex items-center gap-2 text-xs font-bold text-on-surface-variant uppercase tracking-widest px-3 py-1 bg-surface-container rounded-full">
+<span class="material-symbols-outlined text-sm" data-icon="picture_as_pdf">picture_as_pdf</span> PDF
+                            </div>
+<div class="flex items-center gap-2 text-xs font-bold text-on-surface-variant uppercase tracking-widest px-3 py-1 bg-surface-container rounded-full">
+<span class="material-symbols-outlined text-sm" data-icon="slideshow">slideshow</span> PPTX
+                            </div>
+</div>
+</div>
+</div>
+<!-- Ongoing Analysis Section -->
+<div class="bg-surface-container-low rounded-lg p-8 space-y-6">
+<div class="flex items-start justify-between">
+<div class="flex gap-4">
+<div class="w-14 h-14 rounded-lg bg-surface-container-highest flex items-center justify-center">
+<span class="material-symbols-outlined text-primary text-3xl" data-icon="description">description</span>
+</div>
+<div>
+<h4 class="text-xl font-bold text-on-surface">Organic Chemistry Lecture 4.pdf</h4>
+<div class="flex items-center gap-2 mt-1">
+<span class="relative flex h-2 w-2">
+<span class="animate-ping absolute inline-flex h-full w-full rounded-full bg-secondary opacity-75"></span>
+<span class="relative inline-flex rounded-full h-2 w-2 bg-secondary"></span>
+</span>
+<p class="text-sm font-medium text-secondary">AI is extracting key concepts...</p>
+</div>
+</div>
+</div>
+<div class="text-right">
+<span class="text-2xl font-black text-on-surface">64%</span>
+</div>
+</div>
+<!-- The Fruit Meter (Custom Progress Bar) -->
+<div class="relative h-4 w-full bg-surface-container-highest rounded-full overflow-hidden">
+<div class="absolute top-0 left-0 h-full melon-gradient rounded-full" style="width: 64%;"></div>
+</div>
+<!-- Analysis Preview Bento -->
+<div class="grid grid-cols-3 gap-4">
+<div class="bg-surface-container-lowest p-4 rounded-md border border-white/50">
+<p class="text-[10px] font-bold uppercase tracking-widest text-on-surface-variant mb-2">Detected Concepts</p>
+<div class="flex flex-wrap gap-2">
+<span class="px-2 py-1 bg-secondary-container text-on-secondary-container text-[10px] font-bold rounded">Stereochemistry</span>
+<span class="px-2 py-1 bg-secondary-container text-on-secondary-container text-[10px] font-bold rounded">Enantiomers</span>
+<span class="px-2 py-1 bg-surface-container text-on-surface-variant text-[10px] font-bold rounded animate-pulse">Processing...</span>
+</div>
+</div>
+<div class="bg-surface-container-lowest p-4 rounded-md border border-white/50">
+<p class="text-[10px] font-bold uppercase tracking-widest text-on-surface-variant mb-2">Study Cards</p>
+<div class="flex items-center gap-2">
+<span class="text-xl font-extrabold text-on-surface">12</span>
+<span class="text-[10px] font-medium text-on-surface-variant">Generated so far</span>
+</div>
+</div>
+<div class="bg-surface-container-lowest p-4 rounded-md border border-white/50">
+<p class="text-[10px] font-bold uppercase tracking-widest text-on-surface-variant mb-2">Complexity Level</p>
+<div class="flex items-center gap-2">
+<span class="material-symbols-outlined text-primary text-lg" data-icon="model_training">model_training</span>
+<span class="text-[10px] font-bold text-on-surface">Advanced Academic</span>
+</div>
+</div>
+</div>
+</div>
+</div>
+<!-- Knowledge Pods Preview -->
+<section class="pt-8">
+<div class="flex items-center justify-between mb-6">
+<h3 class="text-2xl font-bold text-on-surface">Your Knowledge Pods</h3>
+<button class="text-sm font-bold text-primary flex items-center gap-1 hover:gap-2 transition-all">
+                        View All <span class="material-symbols-outlined text-sm" data-icon="arrow_forward">arrow_forward</span>
+</button>
+</div>
+<div class="grid grid-cols-3 gap-6">
+<!-- Knowledge Pod Card 1 -->
+<div class="bg-surface-bright rounded-lg p-6 shadow-sm hover:shadow-md transition-shadow group cursor-pointer relative overflow-hidden">
+<div class="absolute top-0 right-0 p-4 opacity-10 group-hover:opacity-20 transition-opacity">
+<span class="material-symbols-outlined text-6xl" data-icon="biotech">biotech</span>
+</div>
+<div class="relative z-10">
+<div class="w-10 h-10 rounded-full bg-secondary-fixed flex items-center justify-center mb-4">
+<span class="material-symbols-outlined text-on-secondary-container" data-icon="dna">genetics</span>
+</div>
+<h5 class="text-lg font-bold text-on-surface mb-1">Cellular Biology</h5>
+<p class="text-sm text-on-surface-variant mb-4">24 Flashcards • 3 Practice Quizzes</p>
+<div class="h-1.5 w-full bg-surface-container rounded-full">
+<div class="h-full bg-secondary w-[85%] rounded-full"></div>
+</div>
+</div>
+</div>
+<!-- Knowledge Pod Card 2 -->
+<div class="bg-surface-bright rounded-lg p-6 shadow-sm hover:shadow-md transition-shadow group cursor-pointer relative overflow-hidden">
+<div class="absolute top-0 right-0 p-4 opacity-10 group-hover:opacity-20 transition-opacity">
+<span class="material-symbols-outlined text-6xl" data-icon="functions">functions</span>
+</div>
+<div class="relative z-10">
+<div class="w-10 h-10 rounded-full bg-primary-fixed flex items-center justify-center mb-4">
+<span class="material-symbols-outlined text-on-primary-container" data-icon="variable">variables</span>
+</div>
+<h5 class="text-lg font-bold text-on-surface mb-1">Calculus II: Integrals</h5>
+<p class="text-sm text-on-surface-variant mb-4">18 Flashcards • 1 Practice Quiz</p>
+<div class="h-1.5 w-full bg-surface-container rounded-full">
+<div class="h-full bg-primary w-[40%] rounded-full"></div>
+</div>
+</div>
+</div>
+<!-- Knowledge Pod Card 3 -->
+<div class="bg-surface-bright rounded-lg p-6 shadow-sm hover:shadow-md transition-shadow group cursor-pointer relative overflow-hidden">
+<div class="absolute top-0 right-0 p-4 opacity-10 group-hover:opacity-20 transition-opacity">
+<span class="material-symbols-outlined text-6xl" data-icon="history_edu">history_edu</span>
+</div>
+<div class="relative z-10">
+<div class="w-10 h-10 rounded-full bg-tertiary-fixed flex items-center justify-center mb-4">
+<span class="material-symbols-outlined text-on-tertiary-container" data-icon="temple_buddhist">temple_buddhist</span>
+</div>
+<h5 class="text-lg font-bold text-on-surface mb-1">Renaissance Art</h5>
+<p class="text-sm text-on-surface-variant mb-4">42 Flashcards • 5 Practice Quizzes</p>
+<div class="h-1.5 w-full bg-surface-container rounded-full">
+<div class="h-full bg-tertiary w-[10%] rounded-full"></div>
+</div>
+</div>
+</div>
+</div>
+</section>
+</div>
+</main>
+<!-- Floating Action Seed -->
+<button class="fixed bottom-8 right-8 w-16 h-16 rounded-full melon-gradient text-white flex items-center justify-center shadow-[0_12px_32px_rgba(171,50,58,0.25)] hover:scale-110 active:scale-95 transition-all z-50">
+<span class="material-symbols-outlined text-3xl" data-icon="add">add</span>
+</button>
+</body></html>

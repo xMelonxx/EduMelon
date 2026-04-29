@@ -1,0 +1,112 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    --c-surface: #f6faf6;
+    --c-on-surface: #181d1a;
+    --c-on-surface-variant: #584141;
+    --c-surface-container-low: #f1f5f1;
+    --c-surface-container: #ebefeb;
+    --c-surface-container-high: #e5e9e5;
+    --c-surface-container-highest: #dfe3e0;
+    --c-surface-container-lowest: #ffffff;
+    --c-primary: #ab323a;
+    --c-primary-container: #ff7074;
+    --c-on-primary: #ffffff;
+    --c-secondary: #296a46;
+    --c-secondary-container: #aef2c4;
+    --c-on-secondary-container: #30704c;
+    --c-tertiary: #596060;
+    --c-outline: #8b7170;
+    --c-outline-variant: #dfbfbe;
+    --c-error: #ba1a1a;
+    --shadow-melon: 0 12px 32px rgba(171, 50, 58, 0.08);
+    --shadow-melon-lg: 0 24px 48px rgba(171, 50, 58, 0.06);
+  }
+
+  html.dark {
+    --c-surface: #0f1412;
+    --c-on-surface: #dfe4e0;
+    --c-on-surface-variant: #bccabb;
+    --c-surface-container-lowest: #0a0f0d;
+    --c-surface-container-low: #181d1a;
+    --c-surface-container: #1c211e;
+    --c-surface-container-high: #262b29;
+    --c-surface-container-highest: #313633;
+    --c-primary: #6bfb9a;
+    --c-primary-container: #4ade80;
+    --c-on-primary: #003919;
+    --c-secondary: #c1c8c3;
+    --c-secondary-container: #434b47;
+    --c-on-secondary-container: #b3bab5;
+    --c-tertiary: #ffd6d9;
+    --c-outline: #869486;
+    --c-outline-variant: #3d4a3e;
+    --c-error: #ffb4ab;
+    --shadow-melon: 0 12px 32px rgba(0, 0, 0, 0.35);
+    --shadow-melon-lg: 0 24px 48px rgba(0, 0, 0, 0.45);
+  }
+
+  html,
+  body,
+  #root {
+    @apply h-full min-h-screen;
+  }
+  body {
+    @apply bg-surface text-on-surface antialiased transition-colors duration-200;
+    @apply font-sans;
+  }
+}
+
+.material-symbols-outlined {
+  font-family: "Material Symbols Outlined", sans-serif;
+  font-weight: normal;
+  font-style: normal;
+  font-size: 1.25rem;
+  line-height: 1;
+  letter-spacing: normal;
+  text-transform: none;
+  display: inline-block;
+  white-space: nowrap;
+  word-wrap: normal;
+  direction: ltr;
+  font-variation-settings: "FILL" 0, "wght" 400, "GRAD" 0, "opsz" 24;
+}
+
+.melon-gradient {
+  background: linear-gradient(135deg, var(--c-primary) 0%, var(--c-primary-container) 100%);
+}
+
+html.dark .melon-gradient {
+  background: linear-gradient(135deg, #4ade80 0%, #6bfb9a 100%);
+}
+
+.fruit-meter {
+  @apply h-4 w-full rounded-full overflow-hidden flex p-1 bg-surface-container-high;
+}
+
+.fruit-meter > span {
+  @apply h-full rounded-full shadow-inner bg-gradient-to-r from-secondary to-primary;
+}
+
+.folder-card {
+  position: relative;
+  isolation: isolate;
+}
+
+html.dark .folder-card::after {
+  content: "";
+  position: absolute;
+  left: 18px;
+  right: 18px;
+  bottom: -14px;
+  height: 26px;
+  background: var(--folder-glow, transparent);
+  border-radius: 9999px;
+  filter: blur(20px);
+  opacity: 0.28;
+  pointer-events: none;
+  z-index: -1;
+}

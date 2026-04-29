@@ -1,0 +1,195 @@
+<!DOCTYPE html>
+
+<html class="light" lang="pl"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>EduMelon - Wybór Kierunku</title>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@300;400;500;600;700;800&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<script id="tailwind-config">
+      tailwind.config = {
+        darkMode: "class",
+        theme: {
+          extend: {
+            "colors": {
+                    "surface-dim": "#d7dbd7",
+                    "surface-container-highest": "#dfe3e0",
+                    "on-primary-container": "#710116",
+                    "on-primary": "#ffffff",
+                    "tertiary": "#596060",
+                    "primary-fixed": "#ffdad9",
+                    "on-secondary": "#ffffff",
+                    "on-tertiary": "#ffffff",
+                    "on-background": "#181d1a",
+                    "on-secondary-fixed": "#002110",
+                    "secondary-fixed-dim": "#92d5a9",
+                    "on-error": "#ffffff",
+                    "inverse-surface": "#2d312f",
+                    "inverse-primary": "#ffb3b2",
+                    "on-tertiary-fixed": "#161d1d",
+                    "tertiary-fixed": "#dde4e3",
+                    "error-container": "#ffdad6",
+                    "surface-container": "#ebefeb",
+                    "primary-fixed-dim": "#ffb3b2",
+                    "inverse-on-surface": "#eef2ee",
+                    "surface-container-lowest": "#ffffff",
+                    "surface-bright": "#f6faf6",
+                    "outline": "#8b7170",
+                    "surface-container-low": "#f1f5f1",
+                    "surface-variant": "#dfe3e0",
+                    "on-tertiary-fixed-variant": "#414848",
+                    "on-primary-fixed": "#410008",
+                    "on-error-container": "#93000a",
+                    "error": "#ba1a1a",
+                    "surface": "#f6faf6",
+                    "surface-tint": "#ab323a",
+                    "on-surface-variant": "#584141",
+                    "on-secondary-fixed-variant": "#095230",
+                    "on-secondary-container": "#30704c",
+                    "on-primary-fixed-variant": "#8a1925",
+                    "secondary-container": "#aef2c4",
+                    "background": "#f6faf6",
+                    "secondary": "#296a46",
+                    "outline-variant": "#dfbfbe",
+                    "tertiary-fixed-dim": "#c1c8c7",
+                    "tertiary-container": "#989f9f",
+                    "primary-container": "#ff7074",
+                    "on-surface": "#181d1a",
+                    "primary": "#ab323a",
+                    "surface-container-high": "#e5e9e5",
+                    "secondary-fixed": "#aef2c4",
+                    "on-tertiary-container": "#2f3636"
+            },
+            "borderRadius": {
+                    "DEFAULT": "1rem",
+                    "lg": "2rem",
+                    "xl": "3rem",
+                    "full": "9999px"
+            },
+            "fontFamily": {
+                    "headline": ["Plus Jakarta Sans"],
+                    "body": ["Plus Jakarta Sans"],
+                    "label": ["Plus Jakarta Sans"]
+            }
+          },
+        },
+      }
+    </script>
+<style>
+        .material-symbols-outlined {
+            font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24;
+        }
+        body { font-family: 'Plus Jakarta Sans', sans-serif; }
+    </style>
+</head>
+<body class="bg-surface text-on-surface min-h-screen flex flex-col overflow-x-hidden">
+<!-- Top Navigation (Shell Implementation) -->
+<nav class="flex justify-between items-center px-6 py-4 w-full bg-[#f6faf6] dark:bg-stone-950 sticky top-0 z-40">
+<div class="text-2xl font-bold text-[#ab323a] dark:text-[#ff7074] font-['Plus_Jakarta_Sans'] tracking-tight">EduMelon</div>
+<div class="flex items-center gap-4">
+<button class="text-[#584141] dark:text-stone-400 hover:opacity-80 transition-opacity">
+<span class="material-symbols-outlined">help_outline</span>
+</button>
+</div>
+</nav>
+<!-- Main Content Canvas -->
+<main class="flex-grow flex flex-col items-center px-6 pt-8 pb-32 max-w-4xl mx-auto w-full">
+<!-- Progress Indicator -->
+<div class="w-full max-w-md mb-12">
+<div class="flex justify-between items-center mb-4 px-2">
+<span class="text-xs font-bold uppercase tracking-widest text-primary">Krok 3 z 5</span>
+<span class="text-xs font-bold uppercase tracking-widest text-secondary">Profil Studenta</span>
+</div>
+<div class="h-3 w-full bg-secondary-container rounded-full overflow-hidden">
+<div class="h-full w-[60%] bg-gradient-to-r from-primary to-primary-container rounded-full"></div>
+</div>
+</div>
+<!-- Header Section -->
+<header class="text-center mb-10">
+<h1 class="text-4xl md:text-5xl font-extrabold tracking-tight text-on-surface mb-4">Co studiujesz?</h1>
+<p class="text-on-surface-variant max-w-lg mx-auto leading-relaxed">Wybierz swój kierunek, abyśmy mogli dopasować materiały i grupy nauki do Twojego planu zajęć.</p>
+</header>
+<!-- Search Bar -->
+<div class="w-full max-w-xl mb-8 group">
+<div class="relative flex items-center">
+<span class="material-symbols-outlined absolute left-4 text-on-surface-variant">search</span>
+<input class="w-full pl-12 pr-4 py-5 bg-surface-container-high border-none rounded-xl focus:ring-2 focus:ring-primary focus:bg-surface-container-lowest transition-all text-lg placeholder:text-on-surface-variant/50" placeholder="Szukaj kierunku (np. Informatyka...)" type="text"/>
+</div>
+</div>
+<!-- Bento Grid / Selection Cards -->
+<div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6 w-full">
+<!-- Category: Tech -->
+<button class="group relative p-6 bg-surface-container-low rounded-lg text-left hover:bg-surface-container-highest transition-all border border-transparent hover:border-outline-variant/15 overflow-hidden">
+<div class="absolute -top-4 -right-4 w-24 h-24 bg-primary/5 rounded-full blur-2xl group-hover:bg-primary/10 transition-colors"></div>
+<span class="material-symbols-outlined text-primary text-3xl mb-4 block" style="font-variation-settings: 'FILL' 1;">terminal</span>
+<h3 class="text-xl font-bold text-on-surface mb-1">Informatyka</h3>
+<p class="text-sm text-on-surface-variant">Algorytmy, programowanie i AI</p>
+<!-- Seed Accent Decor -->
+<div class="absolute bottom-3 right-3 w-2 h-2 bg-on-surface rounded-full opacity-10"></div>
+</button>
+<!-- Category: Medicine -->
+<button class="group relative p-6 bg-surface-container-lowest rounded-lg text-left hover:bg-surface-container-high transition-all border border-transparent hover:border-outline-variant/15 shadow-sm">
+<span class="material-symbols-outlined text-secondary text-3xl mb-4 block" style="font-variation-settings: 'FILL' 1;">science</span>
+<h3 class="text-xl font-bold text-on-surface mb-1">Biologia</h3>
+<p class="text-sm text-on-surface-variant">Genetyka, ekologia i zoologia</p>
+</button>
+<!-- Category: Law -->
+<button class="group relative p-6 bg-surface-container-low rounded-lg text-left hover:bg-surface-container-highest transition-all border border-transparent hover:border-outline-variant/15">
+<span class="material-symbols-outlined text-primary-container text-3xl mb-4 block" style="font-variation-settings: 'FILL' 1;">gavel</span>
+<h3 class="text-xl font-bold text-on-surface mb-1">Prawo</h3>
+<p class="text-sm text-on-surface-variant">Kodeksy, konstytucja i rzymskie</p>
+</button>
+<!-- Category: Arts -->
+<button class="group relative p-6 bg-surface-container-lowest rounded-lg text-left hover:bg-surface-container-high transition-all border border-transparent hover:border-outline-variant/15 shadow-sm">
+<span class="material-symbols-outlined text-secondary-fixed-dim text-3xl mb-4 block" style="font-variation-settings: 'FILL' 1;">palette</span>
+<h3 class="text-xl font-bold text-on-surface mb-1">Architektura</h3>
+<p class="text-sm text-on-surface-variant">Projektowanie, historia i sztuka</p>
+</button>
+<!-- Category: Econ -->
+<button class="group relative p-6 bg-surface-container-low rounded-lg text-left hover:bg-surface-container-highest transition-all border border-transparent hover:border-outline-variant/15">
+<span class="material-symbols-outlined text-primary text-3xl mb-4 block" style="font-variation-settings: 'FILL' 1;">query_stats</span>
+<h3 class="text-xl font-bold text-on-surface mb-1">Ekonomia</h3>
+<p class="text-sm text-on-surface-variant">Finanse, rynek i ekonometria</p>
+</button>
+<!-- Category: Other -->
+<button class="group relative p-6 bg-surface-container-lowest rounded-lg text-left hover:bg-surface-container-high transition-all border border-transparent hover:border-outline-variant/15 shadow-sm italic">
+<span class="material-symbols-outlined text-on-surface-variant text-3xl mb-4 block">more_horiz</span>
+<h3 class="text-xl font-bold text-on-surface mb-1">Inny kierunek</h3>
+<p class="text-sm text-on-surface-variant">Wpisz nazwę ręcznie...</p>
+</button>
+</div>
+<!-- Visual Anchor: Seed Texture Decoration -->
+<div class="mt-16 flex gap-4 opacity-20 select-none pointer-events-none">
+<div class="w-4 h-4 bg-on-surface rounded-full"></div>
+<div class="w-4 h-4 bg-on-surface rounded-full"></div>
+<div class="w-4 h-4 bg-on-surface rounded-full"></div>
+</div>
+</main>
+<!-- Bottom Navigation Shell (Onboarding Context) -->
+<footer class="fixed bottom-0 left-0 w-full z-50 flex justify-around items-center px-8 pb-8 pt-4 bg-white/80 dark:bg-stone-900/80 backdrop-blur-xl shadow-[0_-12px_32px_rgba(171,50,58,0.08)] rounded-t-[3rem]">
+<!-- Back Button (Inactive state from JSON) -->
+<button class="flex flex-col items-center justify-center text-[#584141] dark:text-stone-400 p-3 hover:text-[#ab323a] dark:hover:text-[#ff7074] transition-colors">
+<span class="material-symbols-outlined mb-1">arrow_back</span>
+<span class="font-['Plus_Jakarta_Sans'] text-[10px] uppercase tracking-widest">Wstecz</span>
+</button>
+<!-- Progress (Active state from JSON logic - Step 3) -->
+<button class="flex flex-col items-center justify-center bg-gradient-to-br from-[#ab323a] to-[#ff7074] text-white rounded-full p-3 shadow-lg shadow-primary/20 active:scale-90 transition-transform">
+<span class="material-symbols-outlined mb-1">eco</span>
+<span class="font-['Plus_Jakarta_Sans'] text-[10px] uppercase tracking-widest">Postęp</span>
+</button>
+<!-- Skip/Next (Inactive state from JSON) -->
+<button class="flex flex-col items-center justify-center text-[#584141] dark:text-stone-400 p-3 hover:text-[#ab323a] dark:hover:text-[#ff7074] transition-colors">
+<span class="material-symbols-outlined mb-1">skip_next</span>
+<span class="font-['Plus_Jakarta_Sans'] text-[10px] uppercase tracking-widest">Dalej</span>
+</button>
+</footer>
+<!-- Decorative Elements (Glassmorphic Orbs) -->
+<div class="fixed -z-10 top-20 -left-20 w-80 h-80 bg-secondary-container/20 rounded-full blur-[100px]"></div>
+<div class="fixed -z-10 bottom-40 -right-20 w-96 h-96 bg-primary-container/10 rounded-full blur-[120px]"></div>
+<!-- Hero Image Decoration (Organic Placement) -->
+<div class="fixed top-[20%] right-[5%] hidden xl:block pointer-events-none w-64 h-64 overflow-hidden rounded-xl rotate-3 shadow-xl">
+<img class="w-full h-full object-cover" data-alt="Group of diverse university students studying together in a bright modern library with soft natural light and plants" src="https://lh3.googleusercontent.com/aida-public/AB6AXuD286mhaEkE4FjmqzAuWgoBSFgI0i3Aksq0fapRGHxNWXavaKUaUOuTA5QhCC4xizrqwlQgNg9HSUhBcNPtnk_L02tOmLBcYQ2-vEPJgvBIM2vjyJiqS0mzSi9Kt0-n3H1Ahy6IWgyHGoopxovY5lwRZTe47zNwH03jziUO8mlOWRSkydserWlwvgMXcLhZtc1sR9p9q48dKiiOMmg6p9BzkqNhmuIsSn2BGjvnkyZ9UXkrPaLogBWwTvutV7HQkrbvhkZ-6mwvw5g"/>
+</div>
+</body></html>

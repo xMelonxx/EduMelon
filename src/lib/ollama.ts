@@ -1,0 +1,142 @@
+import { OLLAMA_BASE_URL } from "./constants";
+
+export async function ollamaTagsReachable(): Promise<boolean> {
+  try {
+    const r = await fetch(`${OLLAMA_BASE_URL}/api/tags`, { method: "GET" });
+    return r.ok;
+  } catch {
+    return false;
+  }
+}
+
+export async function ollamaListModels(): Promise<string[]> {
+  const r = await fetch(`${OLLAMA_BASE_URL}/api/tags`);
+  if (!r.ok) throw new Error("Nie można odczytać listy modeli Ollama");
+  const data = (await r.json()) as { models?: { name: string }[] };
+  return (data.models ?? []).map((m) => m.name);
+}
+
+export async function ollamaPull(
+  model: string,
+  onLine?: (line: string) => void,
+): Promise<void> {
+  const r = await fetch(`${OLLAMA_BASE_URL}/api/pull`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ name: model, stream: true }),
+  });
+  if (!r.ok || !r.body) {
+    throw new Error(`pull failed: ${r.status}`);
+  }
+  const reader = r.body.getReader();
+  const decoder = new TextDecoder();
+  for (;;) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    const chunk = decoder.decode(value, { stream: true });
+    for (const line of chunk.split("\n")) {
+      if (line.trim() && onLine) onLine(line.trim());
+    }
+  }
+}
+
+export type OllamaChatOptions = {
+  stream?: boolean;
+  /** JSON Schema (structured) albo `"json"` — wymusza poprawny JSON w Ollamie. */
+  format?: object | "json";
+  temperature?: number;
+  /** Max tokenów odpowiedzi (np. długa tablica fiszek). */
+  num_predict?: number;
+};
+
+export type OllamaImageMessage = {
+  role: string;
+  content: string;
+  /** Base64 PNG/JPEG (bez prefixu data URL). */
+  images?: string[];
+};
+
+export async function ollamaChat(
+  model: string,
+  messages: { role: string; content: string }[],
+  options?: OllamaChatOptions,
+): Promise<string> {
+  const body: Record<string, unknown> = {
+    model,
+    messages,
+    stream: options?.stream ?? false,
+  };
+  if (options?.format !== undefined) body.format = options.format;
+  const ollamaOpts: Record<string, unknown> = {};
+  if (options?.temperature !== undefined)
+    ollamaOpts.temperature = options.temperature;
+  if (options?.num_predict !== undefined)
+    ollamaOpts.num_predict = options.num_predict;
+  if (Object.keys(ollamaOpts).length > 0) body.options = ollamaOpts;
+  const r = await fetch(`${OLLAMA_BASE_URL}/api/chat`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(body),
+  });
+  if (!r.ok) {
+    const t = await r.text();
+    throw new Error(`chat: ${r.status} ${t}`);
+  }
+  const data = (await r.json()) as {
+    message?: { content?: string };
+  };
+  return data.message?.content ?? "";
+}
+
+/** Chat z obrazami (vision) — do OCR/odczytu slajdów będących obrazem. */
+export async function ollamaChatWithImages(
+  model: string,
+  messages: OllamaImageMessage[],
+  options?: OllamaChatOptions,
+): Promise<string> {
+  const body: Record<string, unknown> = {
+    model,
+    messages,
+    stream: options?.stream ?? false,
+  };
+  if (options?.format !== undefined) body.format = options.format;
+  const ollamaOpts: Record<string, unknown> = {};
+  if (options?.temperature !== undefined) {
+    ollamaOpts.temperature = options.temperature;
+  }
+  if (options?.num_predict !== undefined) {
+    ollamaOpts.num_predict = options.num_predict;
+  }
+  if (Object.keys(ollamaOpts).length > 0) body.options = ollamaOpts;
+  const r = await fetch(`${OLLAMA_BASE_URL}/api/chat`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(body),
+  });
+  if (!r.ok) {
+    const t = await r.text();
+    throw new Error(`chat(vision): ${r.status} ${t}`);
+  }
+  const data = (await r.json()) as {
+    message?: { content?: string };
+  };
+  return data.message?.content ?? "";
+}
+
+export async function ollamaEmbeddings(
+  model: string,
+  prompt: string,
+): Promise<number[]> {
+  const r = await fetch(`${OLLAMA_BASE_URL}/api/embeddings`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ model, prompt }),
+  });
+  if (!r.ok) {
+    const t = await r.text();
+    throw new Error(`embeddings: ${r.status} ${t}`);
+  }
+  const data = (await r.json()) as { embedding?: number[] };
+  if (!data.embedding?.length) throw new Error("Brak wektora embedding");
+  return data.embedding;
+}
