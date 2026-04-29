@@ -6,7 +6,11 @@ import {
   type ThemePreference,
 } from "../lib/theme";
 import { loadLocalProfile } from "../lib/storage";
-import { checkForAppUpdate } from "../lib/updater";
+import {
+  checkForAppUpdate,
+  downloadAndInstallAppUpdate,
+  relaunchAfterUpdate,
+} from "../lib/updater";
 
 type NavDef = {
   to: string;
@@ -54,6 +58,7 @@ const navItems: NavDef[] = [
 const themeOrder: ThemePreference[] = ["light", "dark", "system"];
 const STARTUP_UPDATE_CHECK_KEY = "edumelon_last_update_check_ms";
 const STARTUP_UPDATE_CHECK_TTL_MS = 12 * 60 * 60 * 1000;
+const STARTUP_UPDATE_DISMISSED_VERSION_KEY = "edumelon_update_dismissed_version";
 
 function themeIcon(pref: ThemePreference): string {
   if (pref === "light") return "light_mode";
@@ -66,6 +71,13 @@ export function AppShell() {
   const profile = loadLocalProfile();
   const [, setThemeTick] = useState(0);
   const themePref = getThemePreference();
+  const [startupUpdate, setStartupUpdate] = useState<{
+    version: string;
+    body?: string;
+  } | null>(null);
+  const [startupUpdateBusy, setStartupUpdateBusy] = useState(false);
+  const [startupUpdateProgress, setStartupUpdateProgress] = useState<number | null>(null);
+  const [startupUpdateError, setStartupUpdateError] = useState<string | null>(null);
 
   const cycleTheme = () => {
     const i = themeOrder.indexOf(themePref);
@@ -80,11 +92,93 @@ export function AppShell() {
     const last = raw ? Number(raw) : 0;
     if (Number.isFinite(last) && now - last < STARTUP_UPDATE_CHECK_TTL_MS) return;
     localStorage.setItem(STARTUP_UPDATE_CHECK_KEY, String(now));
-    void checkForAppUpdate();
+    void (async () => {
+      const result = await checkForAppUpdate();
+      if (result.kind !== "available") return;
+      const dismissedVersion = localStorage.getItem(STARTUP_UPDATE_DISMISSED_VERSION_KEY);
+      if (dismissedVersion === result.version) return;
+      setStartupUpdate({ version: result.version, body: result.body });
+    })();
   }, []);
+
+  const installStartupUpdateNow = async () => {
+    if (!startupUpdate) return;
+    setStartupUpdateBusy(true);
+    setStartupUpdateError(null);
+    setStartupUpdateProgress(0);
+    try {
+      await downloadAndInstallAppUpdate((percent) => setStartupUpdateProgress(percent));
+      await relaunchAfterUpdate();
+    } catch (e) {
+      setStartupUpdateError(e instanceof Error ? e.message : String(e));
+      setStartupUpdateBusy(false);
+    }
+  };
+
+  const dismissStartupUpdate = () => {
+    if (startupUpdate) {
+      localStorage.setItem(STARTUP_UPDATE_DISMISSED_VERSION_KEY, startupUpdate.version);
+    }
+    setStartupUpdate(null);
+    setStartupUpdateBusy(false);
+    setStartupUpdateProgress(null);
+    setStartupUpdateError(null);
+  };
 
   return (
     <div className="flex min-h-screen bg-surface text-on-surface">
+      {startupUpdate && (
+        <div className="fixed right-4 top-4 z-[80] w-[min(560px,calc(100vw-2rem))] rounded-2xl border border-outline-variant bg-surface-container-lowest shadow-melon p-4 space-y-3">
+          <p className="text-sm font-bold text-on-surface m-0">
+            Dostępna nowa aktualizacja ({startupUpdate.version})
+          </p>
+          {startupUpdate.body?.trim() ? (
+            <p className="text-xs text-on-surface-variant m-0 line-clamp-4">
+              {startupUpdate.body.trim()}
+            </p>
+          ) : (
+            <p className="text-xs text-on-surface-variant m-0">
+              Pojawiła się nowa wersja aplikacji.
+            </p>
+          )}
+          {startupUpdateProgress != null && (
+            <div className="space-y-1">
+              <div className="h-2 rounded-full bg-surface-container-high overflow-hidden">
+                <div
+                  className="h-full bg-primary transition-all"
+                  style={{ width: `${startupUpdateProgress}%` }}
+                />
+              </div>
+              <p className="text-[11px] text-on-surface-variant m-0">
+                Pobieranie: {startupUpdateProgress}%
+              </p>
+            </div>
+          )}
+          {startupUpdateError && (
+            <p className="text-xs text-error m-0">
+              Nie udało się zaktualizować: {startupUpdateError}
+            </p>
+          )}
+          <div className="flex flex-wrap gap-2">
+            <button
+              type="button"
+              disabled={startupUpdateBusy}
+              onClick={() => void installStartupUpdateNow()}
+              className="bg-primary text-on-primary font-bold px-4 py-2 rounded-xl text-xs disabled:opacity-50"
+            >
+              {startupUpdateBusy ? "Pobieram…" : "Pobierz i zainstaluj teraz"}
+            </button>
+            <button
+              type="button"
+              disabled={startupUpdateBusy}
+              onClick={dismissStartupUpdate}
+              className="bg-surface-container-high text-on-surface font-semibold px-4 py-2 rounded-xl text-xs disabled:opacity-50"
+            >
+              Pobierz później
+            </button>
+          </div>
+        </div>
+      )}
       <aside className="hidden md:flex flex-col w-64 shrink-0 bg-surface-container-low border-r border-outline-variant py-8 z-40">
         <div className="px-6 mb-8">
           <div className="flex items-center gap-3">
