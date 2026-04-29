@@ -254,6 +254,23 @@ fn find_ollama_executable() -> Option<PathBuf> {
     }
 }
 
+fn windows_ollama_dir_candidates() -> Vec<PathBuf> {
+    let mut dirs: Vec<PathBuf> = Vec::new();
+    if let Ok(local_app_data) = env::var("LOCALAPPDATA") {
+        dirs.push(Path::new(&local_app_data).join("Programs\\Ollama"));
+    }
+    if let Ok(user_profile) = env::var("USERPROFILE") {
+        dirs.push(Path::new(&user_profile).join("AppData\\Local\\Programs\\Ollama"));
+    }
+    if let Ok(program_files) = env::var("ProgramFiles") {
+        dirs.push(Path::new(&program_files).join("Ollama"));
+    }
+    if let Ok(program_files_x86) = env::var("ProgramFiles(x86)") {
+        dirs.push(Path::new(&program_files_x86).join("Ollama"));
+    }
+    dirs
+}
+
 fn can_run_ollama_cli() -> Option<PathBuf> {
     if Command::new("ollama")
         .arg("--version")
@@ -277,16 +294,10 @@ fn can_run_ollama_cli() -> Option<PathBuf> {
 
     #[cfg(target_os = "windows")]
     {
-        let mut candidates: Vec<PathBuf> = Vec::new();
-        if let Ok(local_app_data) = env::var("LOCALAPPDATA") {
-            candidates.push(Path::new(&local_app_data).join("Programs\\Ollama\\ollama.exe"));
-        }
-        if let Ok(program_files) = env::var("ProgramFiles") {
-            candidates.push(Path::new(&program_files).join("Ollama\\ollama.exe"));
-        }
-        if let Ok(program_files_x86) = env::var("ProgramFiles(x86)") {
-            candidates.push(Path::new(&program_files_x86).join("Ollama\\ollama.exe"));
-        }
+        let candidates = windows_ollama_dir_candidates()
+            .into_iter()
+            .map(|dir| dir.join("ollama.exe"))
+            .collect::<Vec<_>>();
         for candidate in candidates {
             if candidate.exists()
                 && Command::new(&candidate)
@@ -301,6 +312,15 @@ fn can_run_ollama_cli() -> Option<PathBuf> {
     }
 
     None
+}
+
+#[cfg(target_os = "windows")]
+fn find_ollama_windows_launcher() -> Option<PathBuf> {
+    let candidates = windows_ollama_dir_candidates()
+        .into_iter()
+        .map(|dir| dir.join("Ollama app.exe"))
+        .collect::<Vec<_>>();
+    candidates.into_iter().find(|p| p.exists())
 }
 
 fn is_port_11434_open() -> bool {
@@ -324,12 +344,38 @@ pub async fn diagnose_ollama() -> Result<OllamaDiagnosis, String> {
 
     let ollama_bin = can_run_ollama_cli();
     if ollama_bin.is_none() {
+        #[cfg(target_os = "windows")]
+        {
+            if let Some(launcher) = find_ollama_windows_launcher() {
+                let _ = Command::new(launcher).spawn();
+                for _ in 0..12 {
+                    if ollama_api_ok().await {
+                        return Ok(OllamaDiagnosis {
+                            ok: true,
+                            code: "started_via_launcher".to_string(),
+                            message: "Uruchomiłem Ollamę przez launcher systemowy.".to_string(),
+                            suggestion: "API odpowiada, możesz przejść dalej.".to_string(),
+                        });
+                    }
+                    std::thread::sleep(Duration::from_millis(900));
+                }
+                return Ok(OllamaDiagnosis {
+                    ok: false,
+                    code: "installed_but_not_ready".to_string(),
+                    message: "Ollama wygląda na zainstalowaną, ale API nadal nie odpowiada."
+                        .to_string(),
+                    suggestion:
+                        "Uruchom ręcznie aplikację Ollama z menu Start i po 10-15 sekundach kliknij „Sprawdź ponownie”."
+                            .to_string(),
+                });
+            }
+        }
         return Ok(OllamaDiagnosis {
             ok: false,
             code: "not_installed".to_string(),
             message: "Nie wykryto Ollamy (ani jej pliku wykonywalnego) w systemie.".to_string(),
             suggestion:
-                "Zainstaluj lub przeinstaluj Ollamę i upewnij się, że `ollama.exe` jest dostępny."
+                "Zainstaluj lub przeinstaluj Ollamę. Po instalacji zamknij i uruchom ponownie EduMelon."
                     .to_string(),
         });
     }
