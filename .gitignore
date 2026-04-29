@@ -5,3 +5,6 @@ src-tauri/target/
 *.local
 .cursor/
 .agents/
+RELEASE_NOTES.md
+RESET_ONBOARDING.txt
+skills-lock.json
