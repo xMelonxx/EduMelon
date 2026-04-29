@@ -1,7 +1,9 @@
 use serde::Serialize;
+use std::env;
 use std::fs::File;
 use std::io::Read;
 use std::path::Path;
+use std::path::PathBuf;
 use std::process::Command;
 use std::time::Duration;
 use sysinfo::System;
@@ -218,12 +220,87 @@ async fn ollama_api_ok() -> bool {
     }
 }
 
-fn can_run_ollama_cli() -> bool {
-    Command::new("ollama")
+fn find_ollama_executable() -> Option<PathBuf> {
+    #[cfg(target_os = "windows")]
+    {
+        let where_out = Command::new("where")
+            .arg("ollama.exe")
+            .output()
+            .ok()
+            .filter(|o| o.status.success())?;
+        let stdout = String::from_utf8_lossy(&where_out.stdout).into_owned();
+        let first = stdout
+            .lines()
+            .map(str::trim)
+            .find(|line| !line.is_empty())?
+            .to_string();
+        return Some(PathBuf::from(first));
+    }
+
+    #[cfg(not(target_os = "windows"))]
+    {
+        let which_out = Command::new("which")
+            .arg("ollama")
+            .output()
+            .ok()
+            .filter(|o| o.status.success())?;
+        let stdout = String::from_utf8_lossy(&which_out.stdout).into_owned();
+        let first = stdout
+            .lines()
+            .map(str::trim)
+            .find(|line| !line.is_empty())?
+            .to_string();
+        return Some(PathBuf::from(first));
+    }
+}
+
+fn can_run_ollama_cli() -> Option<PathBuf> {
+    if Command::new("ollama")
         .arg("--version")
         .output()
         .map(|o| o.status.success())
         .unwrap_or(false)
+    {
+        return Some(PathBuf::from("ollama"));
+    }
+
+    if let Some(path) = find_ollama_executable() {
+        if Command::new(&path)
+            .arg("--version")
+            .output()
+            .map(|o| o.status.success())
+            .unwrap_or(false)
+        {
+            return Some(path);
+        }
+    }
+
+    #[cfg(target_os = "windows")]
+    {
+        let mut candidates: Vec<PathBuf> = Vec::new();
+        if let Ok(local_app_data) = env::var("LOCALAPPDATA") {
+            candidates.push(Path::new(&local_app_data).join("Programs\\Ollama\\ollama.exe"));
+        }
+        if let Ok(program_files) = env::var("ProgramFiles") {
+            candidates.push(Path::new(&program_files).join("Ollama\\ollama.exe"));
+        }
+        if let Ok(program_files_x86) = env::var("ProgramFiles(x86)") {
+            candidates.push(Path::new(&program_files_x86).join("Ollama\\ollama.exe"));
+        }
+        for candidate in candidates {
+            if candidate.exists()
+                && Command::new(&candidate)
+                    .arg("--version")
+                    .output()
+                    .map(|o| o.status.success())
+                    .unwrap_or(false)
+            {
+                return Some(candidate);
+            }
+        }
+    }
+
+    None
 }
 
 fn is_port_11434_open() -> bool {
@@ -245,17 +322,19 @@ pub async fn diagnose_ollama() -> Result<OllamaDiagnosis, String> {
         });
     }
 
-    if !can_run_ollama_cli() {
+    let ollama_bin = can_run_ollama_cli();
+    if ollama_bin.is_none() {
         return Ok(OllamaDiagnosis {
             ok: false,
             code: "not_installed".to_string(),
-            message: "Nie wykryto Ollamy w systemie.".to_string(),
-            suggestion: "Zainstaluj Ollamę, potem kliknij „Napraw i sprawdź ponownie”."
-                .to_string(),
+            message: "Nie wykryto Ollamy (ani jej pliku wykonywalnego) w systemie.".to_string(),
+            suggestion:
+                "Zainstaluj lub przeinstaluj Ollamę i upewnij się, że `ollama.exe` jest dostępny."
+                    .to_string(),
         });
     }
 
-    let _ = Command::new("ollama").arg("serve").spawn();
+    let _ = Command::new(ollama_bin.unwrap()).arg("serve").spawn();
     for _ in 0..10 {
         if ollama_api_ok().await {
             return Ok(OllamaDiagnosis {

@@ -427,6 +427,29 @@ export function Onboarding() {
                     zainstalowana, uruchom (albo pozwól aplikacji spróbować ją
                     wystartować) i kliknij „Sprawdź ponownie”.
                   </p>
+                  <div className="rounded-xl bg-surface px-3 py-3 text-xs text-on-surface-variant space-y-1">
+                    <p className="m-0 font-semibold text-on-surface">
+                      Jak zainstalować Ollamę (Windows)
+                    </p>
+                    <p className="m-0">
+                      1) Kliknij „Pobierz Ollama” i uruchom instalator.
+                    </p>
+                    <p className="m-0">
+                      2) Po zakończeniu instalacji uruchom aplikację Ollama z menu
+                      Start.
+                    </p>
+                    <p className="m-0">
+                      3) Odczekaj 5-10 sekund, aż uruchomi się lokalne API
+                      (`127.0.0.1:11434`).
+                    </p>
+                    <p className="m-0">
+                      4) Wróć do EduMelon i kliknij „Sprawdź ponownie” (lub
+                      „Napraw i sprawdź ponownie”).
+                    </p>
+                    <p className="m-0">
+                      5) Jeśli dalej nie działa: zamknij i uruchom ponownie EduMelon.
+                    </p>
+                  </div>
                   {ollamaDiag && (
                     <div className="rounded-xl bg-surface px-3 py-2 text-xs text-on-surface-variant space-y-1">
                       <p className="m-0 font-semibold text-on-surface">
