@@ -155,6 +155,23 @@ export async function ollamaEmbeddings(
   model: string,
   prompt: string,
 ): Promise<number[]> {
+  if (isTauriRuntime()) {
+    try {
+      const embedding = await invoke<number[]>("ollama_embeddings", {
+        model,
+        prompt,
+      });
+      if (!embedding.length) throw new Error("Brak wektora embedding");
+      return embedding;
+    } catch (e) {
+      throw new Error(
+        e instanceof Error
+          ? e.message
+          : `Nie udało się pobrać embeddingów przez backend Tauri: ${String(e)}`,
+      );
+    }
+  }
+
   const r = await fetch(`${OLLAMA_BASE_URL}/api/embeddings`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },

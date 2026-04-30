@@ -198,6 +198,43 @@ pub async fn ollama_pull_model(model: String) -> Result<String, String> {
     Ok(format!("Model {} — pobieranie zakończone.", model))
 }
 
+#[tauri::command]
+pub async fn ollama_embeddings(model: String, prompt: String) -> Result<Vec<f64>, String> {
+    let client = reqwest::Client::builder()
+        .timeout(Duration::from_secs(120))
+        .build()
+        .map_err(|e| e.to_string())?;
+    let body = serde_json::json!({ "model": model, "prompt": prompt });
+    let res = client
+        .post("http://127.0.0.1:11434/api/embeddings")
+        .json(&body)
+        .send()
+        .await
+        .map_err(|e| format!("Ollama embeddings nie odpowiada: {}", e))?;
+    if !res.status().is_success() {
+        return Err(format!("embeddings zwrócił status {}", res.status()));
+    }
+    let data = res
+        .json::<serde_json::Value>()
+        .await
+        .map_err(|e| format!("Nieprawidłowa odpowiedź embeddings: {}", e))?;
+    let embedding = data
+        .get("embedding")
+        .and_then(|v| v.as_array())
+        .ok_or_else(|| "Brak pola embedding w odpowiedzi Ollamy".to_string())?;
+    let mut out = Vec::with_capacity(embedding.len());
+    for val in embedding {
+        let num = val
+            .as_f64()
+            .ok_or_else(|| "Embedding zawiera nieprawidłową wartość".to_string())?;
+        out.push(num);
+    }
+    if out.is_empty() {
+        return Err("Brak wektora embedding".to_string());
+    }
+    Ok(out)
+}
+
 #[derive(Debug, Serialize, Clone)]
 pub struct OllamaDiagnosis {
     pub ok: bool,
