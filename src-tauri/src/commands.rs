@@ -181,7 +181,7 @@ pub async fn ollama_health() -> Result<bool, String> {
 #[tauri::command]
 pub async fn ollama_pull_model(model: String) -> Result<String, String> {
     let client = reqwest::Client::builder()
-        .timeout(std::time::Duration::from_secs(600))
+        .timeout(std::time::Duration::from_secs(7200))
         .build()
         .map_err(|e| e.to_string())?;
     let body = serde_json::json!({ "name": model });
@@ -214,10 +214,17 @@ async fn ollama_api_ok() -> bool {
         Ok(c) => c,
         Err(_) => return false,
     };
-    match client.get("http://127.0.0.1:11434/api/tags").send().await {
-        Ok(r) => r.status().is_success(),
-        Err(_) => false,
+    for url in [
+        "http://127.0.0.1:11434/api/tags",
+        "http://localhost:11434/api/tags",
+    ] {
+        if let Ok(r) = client.get(url).send().await {
+            if r.status().is_success() {
+                return true;
+            }
+        }
     }
+    false
 }
 
 fn find_ollama_executable() -> Option<PathBuf> {
@@ -323,6 +330,15 @@ fn find_ollama_windows_launcher() -> Option<PathBuf> {
     candidates.into_iter().find(|p| p.exists())
 }
 
+#[cfg(target_os = "windows")]
+fn try_start_ollama_via_windows_shell() -> bool {
+    // Fallback for installs discoverable by ShellExecute/App Paths but not PATH.
+    Command::new("cmd")
+        .args(["/C", "start", "", "ollama"])
+        .spawn()
+        .is_ok()
+}
+
 fn is_port_11434_open() -> bool {
     std::net::TcpStream::connect_timeout(
         &"127.0.0.1:11434".parse().unwrap(),
@@ -344,6 +360,23 @@ pub async fn diagnose_ollama() -> Result<OllamaDiagnosis, String> {
 
     let ollama_bin = can_run_ollama_cli();
     if ollama_bin.is_none() {
+        #[cfg(target_os = "windows")]
+        {
+            if try_start_ollama_via_windows_shell() {
+                for _ in 0..12 {
+                    if ollama_api_ok().await {
+                        return Ok(OllamaDiagnosis {
+                            ok: true,
+                            code: "started_via_shell".to_string(),
+                            message: "Uruchomiłem Ollamę przez shell systemowy.".to_string(),
+                            suggestion: "API odpowiada, możesz przejść dalej.".to_string(),
+                        });
+                    }
+                    std::thread::sleep(Duration::from_millis(900));
+                }
+            }
+        }
+
         #[cfg(target_os = "windows")]
         {
             if let Some(launcher) = find_ollama_windows_launcher() {

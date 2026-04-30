@@ -1,6 +1,20 @@
 import { OLLAMA_BASE_URL } from "./constants";
+import { invoke } from "@tauri-apps/api/core";
+
+function isTauriRuntime(): boolean {
+  return typeof window !== "undefined" && "__TAURI_INTERNALS__" in window;
+}
 
 export async function ollamaTagsReachable(): Promise<boolean> {
+  if (isTauriRuntime()) {
+    try {
+      const ok = await invoke<boolean>("ollama_health");
+      if (ok) return true;
+    } catch {
+      // Fall through to HTTP check as backup.
+    }
+  }
+
   try {
     const r = await fetch(`${OLLAMA_BASE_URL}/api/tags`, { method: "GET" });
     return r.ok;
@@ -20,6 +34,20 @@ export async function ollamaPull(
   model: string,
   onLine?: (line: string) => void,
 ): Promise<void> {
+  if (isTauriRuntime()) {
+    try {
+      const result = await invoke<string>("ollama_pull_model", { model });
+      if (onLine) onLine(result);
+      return;
+    } catch (e) {
+      throw new Error(
+        e instanceof Error
+          ? e.message
+          : `Nie udało się pobrać modelu przez backend Tauri: ${String(e)}`,
+      );
+    }
+  }
+
   const r = await fetch(`${OLLAMA_BASE_URL}/api/pull`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },

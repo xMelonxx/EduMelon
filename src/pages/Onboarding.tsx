@@ -217,8 +217,21 @@ export function Onboarding() {
       setOllamaChecking(true);
       try {
         const ok = await ensureOllamaRunning();
-        if (!cancelled) setOllamaOk(ok);
-        if (!cancelled) setOllamaDiag(null);
+        if (!cancelled) {
+          setOllamaOk(ok);
+          setOllamaDiag(null);
+        }
+        if (!ok && isTauri()) {
+          try {
+            const diagnosis = await invoke<OllamaDiagnosis>("diagnose_ollama");
+            if (!cancelled) {
+              setOllamaDiag(diagnosis);
+              setOllamaOk(diagnosis.ok);
+            }
+          } catch {
+            // Keep fallback status from ensureOllamaRunning.
+          }
+        }
       } finally {
         if (!cancelled) setOllamaChecking(false);
       }
@@ -404,9 +417,27 @@ export function Onboarding() {
         {step === 0 && (
           <div className="space-y-4">
             <p className="text-on-surface font-semibold m-0">
-              EduMelon potrzebuje lokalnej Ollamy, żeby generować streszczenia i
-              fiszki.
+              EduMelon potrzebuje lokalnej Ollamy,
             </p>
+            <div className="rounded-xl bg-surface-container-high px-4 py-3 text-xs text-on-surface-variant space-y-1">
+              <p className="m-0 font-semibold text-on-surface">
+                Instrukcja instalacji Ollamy (krok po kroku)
+              </p>
+              <p className="m-0">1) Kliknij „Pobierz Ollama”.</p>
+              <p className="m-0">2) Uruchom pobrany instalator i zakończ instalację.</p>
+              <p className="m-0">
+                3) Otwórz Ollamę z menu Start (uruchomi się w tle).
+              </p>
+              <p className="m-0">
+                4) Odczekaj 10-15 sekund, aż wystartuje lokalne API (`127.0.0.1:11434`).
+              </p>
+              <p className="m-0">
+                5) Wróć do EduMelon i kliknij „Sprawdź ponownie”.
+              </p>
+              <p className="m-0">
+                6) Jeśli dalej nie działa, kliknij „Napraw i sprawdź ponownie”.
+              </p>
+            </div>
             <div className="rounded-2xl bg-surface-container-high px-4 py-4 space-y-2">
               <p className="text-sm text-on-surface-variant m-0">
                 Status:{" "}
@@ -427,29 +458,6 @@ export function Onboarding() {
                     zainstalowana, uruchom (albo pozwól aplikacji spróbować ją
                     wystartować) i kliknij „Sprawdź ponownie”.
                   </p>
-                  <div className="rounded-xl bg-surface px-3 py-3 text-xs text-on-surface-variant space-y-1">
-                    <p className="m-0 font-semibold text-on-surface">
-                      Jak zainstalować Ollamę (Windows)
-                    </p>
-                    <p className="m-0">
-                      1) Kliknij „Pobierz Ollama” i uruchom instalator.
-                    </p>
-                    <p className="m-0">
-                      2) Po zakończeniu instalacji uruchom aplikację Ollama z menu
-                      Start.
-                    </p>
-                    <p className="m-0">
-                      3) Odczekaj 5-10 sekund, aż uruchomi się lokalne API
-                      (`127.0.0.1:11434`).
-                    </p>
-                    <p className="m-0">
-                      4) Wróć do EduMelon i kliknij „Sprawdź ponownie” (lub
-                      „Napraw i sprawdź ponownie”).
-                    </p>
-                    <p className="m-0">
-                      5) Jeśli dalej nie działa: zamknij i uruchom ponownie EduMelon.
-                    </p>
-                  </div>
                   {ollamaDiag && (
                     <div className="rounded-xl bg-surface px-3 py-2 text-xs text-on-surface-variant space-y-1">
                       <p className="m-0 font-semibold text-on-surface">
