@@ -235,6 +235,53 @@ pub async fn ollama_embeddings(model: String, prompt: String) -> Result<Vec<f64>
     Ok(out)
 }
 
+#[tauri::command]
+pub async fn configure_ollama_models_dir(path: String) -> Result<String, String> {
+    let trimmed = path.trim();
+    if trimmed.is_empty() {
+        return Err("Pusty katalog modeli.".to_string());
+    }
+
+    #[cfg(target_os = "windows")]
+    {
+        let escaped = trimmed.replace('\'', "''");
+        let ps = format!(
+            "[Environment]::SetEnvironmentVariable('OLLAMA_MODELS', '{}', 'User')",
+            escaped
+        );
+        let out = Command::new("powershell")
+            .args(["-NoProfile", "-Command", &ps])
+            .output()
+            .map_err(|e| format!("Nie udało się ustawić OLLAMA_MODELS: {}", e))?;
+        if !out.status.success() {
+            let err = String::from_utf8_lossy(&out.stderr);
+            return Err(format!("Błąd ustawiania OLLAMA_MODELS: {}", err.trim()));
+        }
+
+        // Restart Ollamy, aby natychmiast wczytała nową zmienną użytkownika.
+        let _ = Command::new("taskkill")
+            .args(["/IM", "ollama.exe", "/F"])
+            .output();
+        let _ = Command::new("taskkill")
+            .args(["/IM", "Ollama app.exe", "/F"])
+            .output();
+
+        if let Some(launcher) = find_ollama_windows_launcher() {
+            let _ = Command::new(launcher).spawn();
+        } else if let Some(bin) = can_run_ollama_cli() {
+            let _ = Command::new(bin).arg("serve").spawn();
+        }
+
+        return Ok("Ustawiono OLLAMA_MODELS i zrestartowano Ollamę.".to_string());
+    }
+
+    #[cfg(not(target_os = "windows"))]
+    {
+        let _ = trimmed;
+        Err("Automatyczna konfiguracja OLLAMA_MODELS jest dostępna tylko na Windows.".to_string())
+    }
+}
+
 #[derive(Debug, Serialize, Clone)]
 pub struct OllamaDiagnosis {
     pub ok: bool,

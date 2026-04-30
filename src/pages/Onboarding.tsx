@@ -202,6 +202,8 @@ export function Onboarding() {
   const [termsAccepted, setTermsAccepted] = useState(false);
   const [pullLog, setPullLog] = useState<string[]>([]);
   const [pulling, setPulling] = useState(false);
+  const [modelsDirApplying, setModelsDirApplying] = useState(false);
+  const [modelsDirApplyMsg, setModelsDirApplyMsg] = useState<string | null>(null);
   const [pullProgress, setPullProgress] = useState<PullProgress | null>(null);
   const [error, setError] = useState<string | null>(null);
   const resolvedField =
@@ -316,10 +318,30 @@ export function Onboarding() {
     return true;
   };
 
-  const goNext = () => {
+  const goNext = async () => {
     if (!canContinue()) return;
     if (step === 4) {
       setOllamaModelsDir(modelsDir);
+      if (modelsDir && isTauri()) {
+        setModelsDirApplying(true);
+        setModelsDirApplyMsg(null);
+        try {
+          const result = await invoke<string>("configure_ollama_models_dir", {
+            path: modelsDir,
+          });
+          setModelsDirApplyMsg(result);
+        } catch (e) {
+          setModelsDirApplyMsg(
+            e instanceof Error
+              ? `Auto-konfiguracja nieudana: ${e.message}`
+              : `Auto-konfiguracja nieudana: ${String(e)}`,
+          );
+          setModelsDirApplying(false);
+          return;
+        } finally {
+          setModelsDirApplying(false);
+        }
+      }
     }
     next();
   };
@@ -581,11 +603,18 @@ export function Onboarding() {
             <p className="text-sm font-semibold text-on-surface m-0">
               Gdzie zapisywać modele AI?
             </p>
+            <p className="text-xs text-on-surface-variant m-0">
+              Po kliknięciu „Dalej” aplikacja automatycznie ustawi{" "}
+              <code>OLLAMA_MODELS</code> i zrestartuje Ollamę.
+            </p>
             <OllamaModelsFolderSection
               value={modelsDir}
               onChange={setModelsDir}
               compact
             />
+            {modelsDirApplyMsg && (
+              <p className="text-xs text-on-surface-variant m-0">{modelsDirApplyMsg}</p>
+            )}
           </div>
         )}
 
@@ -804,6 +833,7 @@ export function Onboarding() {
             <button
               type="button"
               onClick={back}
+              disabled={modelsDirApplying}
               className="bg-secondary-container text-on-secondary-container font-bold px-6 py-3 rounded-full"
             >
               Wstecz
@@ -812,7 +842,7 @@ export function Onboarding() {
           {step < 4 && (
             <button
               type="button"
-              onClick={goNext}
+              onClick={() => void goNext()}
               disabled={!canContinue()}
               className="melon-gradient text-white font-bold px-8 py-3 rounded-full shadow-melon disabled:opacity-40"
             >
@@ -822,10 +852,11 @@ export function Onboarding() {
           {step === 4 && (
             <button
               type="button"
-              onClick={goNext}
+              onClick={() => void goNext()}
+              disabled={modelsDirApplying}
               className="melon-gradient text-white font-bold px-8 py-3 rounded-full shadow-melon"
             >
-              Dalej
+              {modelsDirApplying ? "Ustawiam folder…" : "Dalej"}
             </button>
           )}
           {step === 5 && (
