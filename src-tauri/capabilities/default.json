@@ -8,6 +8,8 @@
   "permissions": [
     "core:default",
     "opener:default",
+    "updater:default",
+    "process:default",
     "sql:default",
     "sql:allow-execute",
     "dialog:default",
