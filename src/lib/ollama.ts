@@ -25,6 +25,18 @@ export async function ollamaTagsReachable(): Promise<boolean> {
 }
 
 export async function ollamaListModels(): Promise<string[]> {
+  if (isTauriRuntime()) {
+    try {
+      return await invoke<string[]>("ollama_list_models");
+    } catch (e) {
+      throw new Error(
+        e instanceof Error
+          ? e.message
+          : `Nie można odczytać listy modeli przez backend Tauri: ${String(e)}`,
+      );
+    }
+  }
+
   const r = await fetch(`${OLLAMA_BASE_URL}/api/tags`);
   if (!r.ok) throw new Error("Nie można odczytać listy modeli Ollama");
   const data = (await r.json()) as { models?: { name: string }[] };
@@ -99,6 +111,22 @@ export async function ollamaChat(
   messages: { role: string; content: string }[],
   options?: OllamaChatOptions,
 ): Promise<string> {
+  if (isTauriRuntime()) {
+    try {
+      return await invoke<string>("ollama_chat_backend", {
+        model,
+        messages,
+        options: options ?? null,
+      });
+    } catch (e) {
+      throw new Error(
+        e instanceof Error
+          ? e.message
+          : `Nie udało się wykonać chat przez backend Tauri: ${String(e)}`,
+      );
+    }
+  }
+
   const body: Record<string, unknown> = {
     model,
     messages,
@@ -132,6 +160,22 @@ export async function ollamaChatWithImages(
   messages: OllamaImageMessage[],
   options?: OllamaChatOptions,
 ): Promise<string> {
+  if (isTauriRuntime()) {
+    try {
+      return await invoke<string>("ollama_chat_with_images_backend", {
+        model,
+        messages,
+        options: options ?? null,
+      });
+    } catch (e) {
+      throw new Error(
+        e instanceof Error
+          ? e.message
+          : `Nie udało się wykonać chat(vision) przez backend Tauri: ${String(e)}`,
+      );
+    }
+  }
+
   const body: Record<string, unknown> = {
     model,
     messages,

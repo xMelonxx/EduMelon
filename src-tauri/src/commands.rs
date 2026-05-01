@@ -9,6 +9,27 @@ use std::time::Duration;
 use sysinfo::System;
 use tauri::Emitter;
 
+#[derive(Debug, serde::Serialize, serde::Deserialize)]
+pub struct OllamaChatMessage {
+    pub role: String,
+    pub content: String,
+}
+
+#[derive(Debug, serde::Serialize, serde::Deserialize)]
+pub struct OllamaImageMessage {
+    pub role: String,
+    pub content: String,
+    pub images: Option<Vec<String>>,
+}
+
+#[derive(Debug, serde::Deserialize)]
+pub struct OllamaChatOptionsPayload {
+    pub stream: Option<bool>,
+    pub format: Option<serde_json::Value>,
+    pub temperature: Option<f64>,
+    pub num_predict: Option<i64>,
+}
+
 #[derive(Debug, Serialize, Clone)]
 pub struct SlideChunk {
     pub slide_index: u32,
@@ -200,6 +221,35 @@ pub async fn ollama_pull_model(model: String) -> Result<String, String> {
 }
 
 #[tauri::command]
+pub async fn ollama_list_models() -> Result<Vec<String>, String> {
+    let client = reqwest::Client::builder()
+        .timeout(std::time::Duration::from_secs(20))
+        .build()
+        .map_err(|e| e.to_string())?;
+    let res = client
+        .get("http://127.0.0.1:11434/api/tags")
+        .send()
+        .await
+        .map_err(|e| format!("Ollama nie odpowiada: {}", e))?;
+    if !res.status().is_success() {
+        return Err(format!("tags zwrócił status {}", res.status()));
+    }
+    let data = res
+        .json::<serde_json::Value>()
+        .await
+        .map_err(|e| format!("Nieprawidłowa odpowiedź tags: {}", e))?;
+    let mut out: Vec<String> = Vec::new();
+    if let Some(models) = data.get("models").and_then(|v| v.as_array()) {
+        for model in models {
+            if let Some(name) = model.get("name").and_then(|n| n.as_str()) {
+                out.push(name.to_string());
+            }
+        }
+    }
+    Ok(out)
+}
+
+#[tauri::command]
 pub async fn ollama_pull_model_stream(
     app: tauri::AppHandle,
     model: String,
@@ -285,6 +335,116 @@ pub async fn ollama_embeddings(model: String, prompt: String) -> Result<Vec<f64>
         return Err("Brak wektora embedding".to_string());
     }
     Ok(out)
+}
+
+#[tauri::command]
+pub async fn ollama_chat_backend(
+    model: String,
+    messages: Vec<OllamaChatMessage>,
+    options: Option<OllamaChatOptionsPayload>,
+) -> Result<String, String> {
+    let client = reqwest::Client::builder()
+        .timeout(Duration::from_secs(300))
+        .build()
+        .map_err(|e| e.to_string())?;
+
+    let mut body = serde_json::json!({
+        "model": model,
+        "messages": messages,
+        "stream": options.as_ref().and_then(|o| o.stream).unwrap_or(false),
+    });
+    if let Some(opts) = options {
+        if let Some(format) = opts.format {
+            body["format"] = format;
+        }
+        if opts.temperature.is_some() || opts.num_predict.is_some() {
+            let mut o = serde_json::Map::new();
+            if let Some(t) = opts.temperature {
+                o.insert("temperature".to_string(), serde_json::json!(t));
+            }
+            if let Some(n) = opts.num_predict {
+                o.insert("num_predict".to_string(), serde_json::json!(n));
+            }
+            body["options"] = serde_json::Value::Object(o);
+        }
+    }
+
+    let res = client
+        .post("http://127.0.0.1:11434/api/chat")
+        .json(&body)
+        .send()
+        .await
+        .map_err(|e| format!("Ollama chat nie odpowiada: {}", e))?;
+    if !res.status().is_success() {
+        let status = res.status();
+        let text = res.text().await.unwrap_or_default();
+        return Err(format!("chat: {} {}", status, text));
+    }
+    let data = res
+        .json::<serde_json::Value>()
+        .await
+        .map_err(|e| format!("Nieprawidłowa odpowiedź chat: {}", e))?;
+    Ok(data
+        .get("message")
+        .and_then(|m| m.get("content"))
+        .and_then(|c| c.as_str())
+        .unwrap_or("")
+        .to_string())
+}
+
+#[tauri::command]
+pub async fn ollama_chat_with_images_backend(
+    model: String,
+    messages: Vec<OllamaImageMessage>,
+    options: Option<OllamaChatOptionsPayload>,
+) -> Result<String, String> {
+    let client = reqwest::Client::builder()
+        .timeout(Duration::from_secs(300))
+        .build()
+        .map_err(|e| e.to_string())?;
+
+    let mut body = serde_json::json!({
+        "model": model,
+        "messages": messages,
+        "stream": options.as_ref().and_then(|o| o.stream).unwrap_or(false),
+    });
+    if let Some(opts) = options {
+        if let Some(format) = opts.format {
+            body["format"] = format;
+        }
+        if opts.temperature.is_some() || opts.num_predict.is_some() {
+            let mut o = serde_json::Map::new();
+            if let Some(t) = opts.temperature {
+                o.insert("temperature".to_string(), serde_json::json!(t));
+            }
+            if let Some(n) = opts.num_predict {
+                o.insert("num_predict".to_string(), serde_json::json!(n));
+            }
+            body["options"] = serde_json::Value::Object(o);
+        }
+    }
+
+    let res = client
+        .post("http://127.0.0.1:11434/api/chat")
+        .json(&body)
+        .send()
+        .await
+        .map_err(|e| format!("Ollama chat(vision) nie odpowiada: {}", e))?;
+    if !res.status().is_success() {
+        let status = res.status();
+        let text = res.text().await.unwrap_or_default();
+        return Err(format!("chat(vision): {} {}", status, text));
+    }
+    let data = res
+        .json::<serde_json::Value>()
+        .await
+        .map_err(|e| format!("Nieprawidłowa odpowiedź chat(vision): {}", e))?;
+    Ok(data
+        .get("message")
+        .and_then(|m| m.get("content"))
+        .and_then(|c| c.as_str())
+        .unwrap_or("")
+        .to_string())
 }
 
 #[tauri::command]
