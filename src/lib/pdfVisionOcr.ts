@@ -58,6 +58,21 @@ export type ImageCropPercent = {
   h: number;
 };
 
+type OcrVisionOptions = {
+  onProgress?: (current: number, total: number, pageNumber: number) => void;
+  perPageTimeoutMs?: number;
+};
+
+function withTimeout<T>(promise: Promise<T>, ms: number, label: string): Promise<T> {
+  return new Promise<T>((resolve, reject) => {
+    const id = setTimeout(() => reject(new Error(`${label}: timeout po ${ms} ms`)), ms);
+    promise
+      .then((value) => resolve(value))
+      .catch((err) => reject(err))
+      .finally(() => clearTimeout(id));
+  });
+}
+
 function clampPercent(v: number): number {
   return Math.max(0, Math.min(100, v));
 }
@@ -100,36 +115,44 @@ export async function ocrPdfPagesWithVision(
   path: string,
   model: string,
   pageNumbers: number[],
+  options?: OcrVisionOptions,
 ): Promise<Map<number, string>> {
   if (pageNumbers.length === 0) return new Map();
+  const perPageTimeoutMs = options?.perPageTimeoutMs ?? 45_000;
   const raw = await invoke<unknown>("read_file_bytes", { path });
   const bytes = bytesToUint8Array(raw);
   const loadingTask = pdfjs.getDocument({ data: bytes });
   const doc = await loadingTask.promise;
   const out = new Map<number, string>();
 
-  for (const pageNumber of pageNumbers) {
+  for (let idx = 0; idx < pageNumbers.length; idx++) {
+    const pageNumber = pageNumbers[idx]!;
     if (pageNumber < 1 || pageNumber > doc.numPages) continue;
+    options?.onProgress?.(idx + 1, pageNumbers.length, pageNumber);
     const imageB64 = await renderPageToPngBase64(doc, pageNumber);
-    const text = await ollamaChatWithImages(
-      model,
-      [
+    const text = await withTimeout(
+      ollamaChatWithImages(
+        model,
+        [
+          {
+            role: "system",
+            content:
+              "Jesteś silnikiem OCR. Przepisz dokładnie tekst z obrazu po polsku. Bez komentarzy, bez markdown, bez dopowiadania brakujących informacji.",
+          },
+          {
+            role: "user",
+            content:
+              "Przepisz wyłącznie widoczny tekst z tej strony. Zachowaj liczby, skróty medyczne i nazwy własne.",
+            images: [imageB64],
+          },
+        ],
         {
-          role: "system",
-          content:
-            "Jesteś silnikiem OCR. Przepisz dokładnie tekst z obrazu po polsku. Bez komentarzy, bez markdown, bez dopowiadania brakujących informacji.",
+          temperature: 0.0,
+          num_predict: 2048,
         },
-        {
-          role: "user",
-          content:
-            "Przepisz wyłącznie widoczny tekst z tej strony. Zachowaj liczby, skróty medyczne i nazwy własne.",
-          images: [imageB64],
-        },
-      ],
-      {
-        temperature: 0.0,
-        num_predict: 4096,
-      },
+      ),
+      perPageTimeoutMs,
+      `OCR strony ${pageNumber}`,
     );
     const normalized = normalizeText(text);
     if (normalized.length > 0) out.set(pageNumber, normalized);

@@ -91,7 +91,13 @@ export async function ingestFileFromPath(
           `Uruchamiam OCR obrazów (${pagesToOcr.length} stron)…`,
           24,
         );
-        const ocrByPage = await ocrPdfPagesWithVision(path, model, pagesToOcr);
+        const ocrByPage = await ocrPdfPagesWithVision(path, model, pagesToOcr, {
+          onProgress: (current, total, pageNumber) => {
+            const pct = 24 + Math.round((current / Math.max(1, total)) * 8);
+            report(`OCR strony ${pageNumber} (${current}/${total})…`, pct);
+          },
+          perPageTimeoutMs: 45_000,
+        });
         if (ocrByPage.size > 0) {
           slideChunks = slideChunks.map((s) => {
             const ocr = ocrByPage.get(s.slide_index);
