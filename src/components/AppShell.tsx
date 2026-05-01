@@ -1,12 +1,18 @@
 import { invoke } from "@tauri-apps/api/core";
 import { useEffect, useState } from "react";
 import { NavLink, Outlet, useLocation } from "react-router-dom";
+import { FirstRunTutorial } from "./FirstRunTutorial";
 import {
   getThemePreference,
   setThemePreference,
   type ThemePreference,
 } from "../lib/theme";
-import { loadLocalProfile } from "../lib/storage";
+import {
+  getTutorialSeen,
+  isTutorialActive,
+  loadLocalProfile,
+  setTutorialActive,
+} from "../lib/storage";
 import {
   checkForAppUpdateWithTimeout,
   downloadAndInstallAppUpdate,
@@ -84,6 +90,7 @@ export function AppShell() {
     version: string;
     body?: string;
   } | null>(null);
+  const [tutorialOpen, setTutorialOpen] = useState(false);
 
   const cycleTheme = () => {
     const i = themeOrder.indexOf(themePref);
@@ -91,6 +98,20 @@ export function AppShell() {
     setThemePreference(next);
     setThemeTick((x) => x + 1);
   };
+
+  useEffect(() => {
+    const maybeOpenTutorial = () => {
+      if (!location.pathname.startsWith("/app")) return;
+      if (isTutorialActive() || !getTutorialSeen()) {
+        setTutorialOpen(true);
+        setTutorialActive(true);
+      }
+    };
+    maybeOpenTutorial();
+    const onTutorialFlag = () => maybeOpenTutorial();
+    window.addEventListener("edumelon:tutorial-active-changed", onTutorialFlag);
+    return () => window.removeEventListener("edumelon:tutorial-active-changed", onTutorialFlag);
+  }, [location.pathname]);
 
   useEffect(() => {
     const timer = setTimeout(() => {
@@ -176,6 +197,13 @@ export function AppShell() {
 
   return (
     <div className="flex min-h-screen bg-surface text-on-surface">
+      <FirstRunTutorial
+        open={tutorialOpen}
+        onClose={() => {
+          setTutorialOpen(false);
+          setTutorialActive(false);
+        }}
+      />
       {postUpdateNotice && (
         <div className="fixed left-1/2 top-6 z-[90] w-[min(760px,calc(100vw-2rem))] -translate-x-1/2 rounded-2xl border border-outline-variant bg-surface-container-lowest shadow-melon p-4 space-y-3">
           <p className="text-sm font-bold text-on-surface m-0">
@@ -275,35 +303,50 @@ export function AppShell() {
           </div>
         </div>
 
-        <nav className="flex-1 px-2 space-y-1">
-          {navItems.map((item) => {
-            const active = item.isActive(location.pathname);
-            return (
-              <NavLink
-                key={item.to}
-                to={item.to}
-                end={item.to === "/app/dashboard"}
-                className={() =>
-                  [
-                    "flex items-center gap-3 px-4 py-3 mx-2 text-sm font-medium tracking-wide transition-all duration-200 rounded-xl",
-                    active
-                      ? "bg-primary text-on-primary shadow-melon"
-                      : "text-on-surface-variant hover:bg-surface-container hover:text-primary",
-                  ].join(" ")
-                }
-              >
-                <span
-                  className="material-symbols-outlined text-xl"
-                  style={
-                    active ? { fontVariationSettings: "'FILL' 1" } : undefined
+        <nav className="flex-1 px-2">
+          <div data-tour-id="tour-nav-panel" className="space-y-1">
+            {navItems.map((item) => {
+              const active = item.isActive(location.pathname);
+              return (
+                <NavLink
+                  key={item.to}
+                  to={item.to}
+                  data-tour-id={
+                    item.to === "/app/dashboard"
+                      ? "tour-nav-dashboard"
+                      : item.to === "/app/upload"
+                        ? "tour-nav-upload"
+                        : item.to === "/app/flashcards"
+                          ? "tour-nav-flashcards"
+                          : item.to === "/app/tests"
+                            ? "tour-nav-tests"
+                            : item.to === "/app/settings"
+                              ? "tour-nav-settings"
+                              : undefined
+                  }
+                  end={item.to === "/app/dashboard"}
+                  className={() =>
+                    [
+                      "flex items-center gap-3 px-4 py-3 mx-2 text-sm font-medium tracking-wide transition-all duration-200 rounded-xl",
+                      active
+                        ? "bg-primary text-on-primary shadow-melon"
+                        : "text-on-surface-variant hover:bg-surface-container hover:text-primary",
+                    ].join(" ")
                   }
                 >
-                  {item.icon}
-                </span>
-                {item.label}
-              </NavLink>
-            );
-          })}
+                  <span
+                    className="material-symbols-outlined text-xl"
+                    style={
+                      active ? { fontVariationSettings: "'FILL' 1" } : undefined
+                    }
+                  >
+                    {item.icon}
+                  </span>
+                  {item.label}
+                </NavLink>
+              );
+            })}
+          </div>
         </nav>
       </aside>
 

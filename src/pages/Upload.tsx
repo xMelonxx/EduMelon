@@ -64,15 +64,19 @@ export function Upload() {
           <label className="flex flex-col gap-2 text-xs font-bold uppercase tracking-widest text-on-surface-variant">
             Tytuł (opcjonalnie)
             <input
+              data-tour-id="tour-upload-title"
               value={title}
               onChange={(e) => setTitle(e.target.value)}
               placeholder="np. Wykład 3"
               className="rounded-2xl bg-surface-container-high border-0 px-4 py-3 font-sans font-medium normal-case text-on-surface"
             />
           </label>
-          <FolderPicker value={folderId} onChange={setFolderId} />
+          <div data-tour-id="tour-upload-folder">
+            <FolderPicker value={folderId} onChange={setFolderId} />
+          </div>
           <button
             type="button"
+            data-tour-id="tour-upload-button"
             disabled={busy}
             onClick={() => void pickAndIngest()}
             className="w-full sm:w-auto bg-primary text-on-primary font-bold px-10 py-4 rounded-xl shadow-melon disabled:opacity-50"

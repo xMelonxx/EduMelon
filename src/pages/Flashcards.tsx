@@ -383,6 +383,7 @@ export function Flashcards() {
               <div className="mt-10 flex flex-wrap gap-3 justify-center">
                 <button
                   type="button"
+                  data-tour-id="tour-flashcards-flip"
                   onClick={() => setShowBack(!showBack)}
                   className="melon-gradient text-white px-8 py-3 rounded-full font-bold text-base shadow-melon inline-flex items-center gap-2 hover:scale-[1.02] active:scale-95 transition-transform"
                 >
@@ -391,6 +392,7 @@ export function Flashcards() {
                 </button>
                 <button
                   type="button"
+                  data-tour-id="tour-flashcards-next"
                   onClick={async () => {
                     await updateFlashcardProgress(
                       current.id,

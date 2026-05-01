@@ -79,6 +79,7 @@ export function FlashcardsHub() {
                 </div>
                 <Link
                   to={`/app/flashcards/${p.id}`}
+                  data-tour-id="tour-flashcards-open-set"
                   className="inline-flex items-center justify-center gap-2 melon-gradient text-white font-bold px-6 py-3 rounded-full text-sm shadow-melon hover:opacity-95 transition-opacity"
                 >
                   <span className="material-symbols-outlined text-lg">play_arrow</span>

@@ -11,6 +11,9 @@ import { Summary } from "./pages/Summary";
 import { Tests } from "./pages/Tests";
 import { TestsHub } from "./pages/TestsHub";
 import { Upload } from "./pages/Upload";
+import { DemoSummary } from "./tutorial/DemoSummary";
+import { DemoFlashcards } from "./tutorial/DemoFlashcards";
+import { DemoTests } from "./tutorial/DemoTests";
 
 const router = createHashRouter([
   { path: "/", element: <RootGate /> },
@@ -29,6 +32,9 @@ const router = createHashRouter([
       { path: "tests", element: <TestsHub /> },
       { path: "tests/:id", element: <Tests /> },
       { path: "settings", element: <Settings /> },
+      { path: "tutorial/summary", element: <DemoSummary /> },
+      { path: "tutorial/flashcards", element: <DemoFlashcards /> },
+      { path: "tutorial/tests", element: <DemoTests /> },
     ],
   },
 ]);

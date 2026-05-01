@@ -448,7 +448,10 @@ export function Summary() {
       )}
 
       <section className="grid xl:grid-cols-[2.3fr_1fr] gap-5 items-start">
-        <div className="rounded-3xl bg-surface-container-lowest p-5 shadow-melon h-[78vh] flex flex-col">
+        <div
+          data-tour-id="tour-summary-pdf-viewer"
+          className="rounded-3xl bg-surface-container-lowest p-5 shadow-melon h-[78vh] flex flex-col"
+        >
           <div className="flex items-center justify-between mb-3">
             <h3 className="text-sm font-bold uppercase tracking-widest text-on-surface-variant m-0">
               Podgląd pliku
@@ -686,6 +689,7 @@ export function Summary() {
 
           <div className="flex flex-col sm:flex-row gap-3">
             <input
+              data-tour-id="tour-summary-chat-input"
               className="flex-1 rounded-full bg-surface-container-lowest border-0 px-5 py-3 text-sm font-medium shadow-sm focus:ring-2 focus:ring-primary/30"
               value={chatIn}
               onChange={(e) => setChatIn(e.target.value)}
@@ -699,6 +703,7 @@ export function Summary() {
             />
             <button
               type="button"
+              data-tour-id="tour-summary-chat-send"
               disabled={chatBusy || !chatIn.trim()}
               onClick={() => void sendChat()}
               className="melon-gradient text-white font-bold px-8 py-3 rounded-full text-sm disabled:opacity-50 shrink-0"

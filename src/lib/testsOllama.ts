@@ -1,6 +1,7 @@
 import type { ChunkRow } from "./db";
 import { ollamaChat, ollamaChatWithImages } from "./ollama";
 import { pdfPageToImageBase64 } from "./pdfVisionOcr";
+import { getLowSpecTestModeEnabled } from "./storage";
 
 export type TestGenProgress = {
   label: string;
@@ -30,6 +31,12 @@ type TestGenerationOptions = {
 
 const TEST_GEN_CALL_TIMEOUT_MS = 90_000;
 const HEARTBEAT_MS = 3_000;
+
+type TestPerfProfile = {
+  attempts: number;
+  numPredict: number;
+  allowVision: boolean;
+};
 
 function normalizeText(s: string): string {
   return (s || "").replace(/\s+/g, " ").trim();
@@ -173,12 +180,28 @@ async function withTimeout<T>(
   });
 }
 
+function getTestPerfProfile(): TestPerfProfile {
+  if (getLowSpecTestModeEnabled()) {
+    return {
+      attempts: 2,
+      numPredict: 1200,
+      allowVision: false,
+    };
+  }
+  return {
+    attempts: 3,
+    numPredict: 4096,
+    allowVision: true,
+  };
+}
+
 export async function generateTestQuestionsFromChunks(
   model: string,
   chunks: ChunkRow[],
   onProgress?: (p: TestGenProgress) => void,
   options?: TestGenerationOptions,
 ): Promise<GeneratedTestQuestion[]> {
+  const perf = getTestPerfProfile();
   const grouped = new Map<number, string[]>();
   for (const c of chunks) {
     const page = c.slide_index ?? 1;
@@ -243,7 +266,7 @@ ${page.context}
 ---`;
 
     let generated: GeneratedTestQuestion[] = [];
-    const attempts = 3;
+    const attempts = perf.attempts;
     for (let a = 0; a < attempts; a++) {
       const basePercent = 8 + Math.round(((i + 0.25 + a * 0.2) / pages.length) * 84);
       let heartbeat = 0;
@@ -261,6 +284,7 @@ ${page.context}
       try {
         let raw = "";
         if (
+          perf.allowVision &&
           options?.sourceKind?.toLowerCase() === "pdf" &&
           options.filePath &&
           page.slide_index > 0
@@ -280,7 +304,7 @@ ${page.context}
               {
                 format: "json",
                 temperature: 0.25,
-                num_predict: 4096,
+                num_predict: perf.numPredict,
               },
             ),
             TEST_GEN_CALL_TIMEOUT_MS,
@@ -297,7 +321,7 @@ ${page.context}
               {
                 format: "json",
                 temperature: 0.25,
-                num_predict: 4096,
+                num_predict: perf.numPredict,
               },
             ),
             TEST_GEN_CALL_TIMEOUT_MS,

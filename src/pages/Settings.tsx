@@ -21,12 +21,17 @@ import {
   type AccentPresetId,
 } from "../lib/theme";
 import {
+  getLowSpecTestModeEnabled,
   getOllamaModelsDir,
   getOrCreateInstallId,
   loadLocalProfile,
+  resetTutorialSeen,
   saveLocalProfile,
+  setLowSpecTestModeEnabled,
   setOllamaModelsDir,
+  setTutorialActive,
 } from "../lib/storage";
+import { useNavigate } from "react-router-dom";
 import {
   saveFeedbackWithAttachmentsToSupabase,
   type FeedbackType,
@@ -51,6 +56,7 @@ const FEEDBACK_ALLOWED_MIME_TYPES = new Set([
 ]);
 
 export function Settings() {
+  const navigate = useNavigate();
   const [profile, setProfile] = useState(loadLocalProfile());
   const [model, setModel] = useState<ModelProfileId>(
     profile?.modelProfile ?? "e2b-it",
@@ -84,6 +90,7 @@ export function Settings() {
   const [feedbackFiles, setFeedbackFiles] = useState<File[]>([]);
   const [versionTapCount, setVersionTapCount] = useState(0);
   const [devToolsUnlockedMsg, setDevToolsUnlockedMsg] = useState<string | null>(null);
+  const [lowSpecTestMode, setLowSpecTestMode] = useState(getLowSpecTestModeEnabled);
   const devToolsEnabled = isDevToolsEnabled();
 
   useEffect(() => {
@@ -358,6 +365,59 @@ export function Settings() {
         />
       </section>
 
+      <section
+        data-tour-id="tour-settings-performance"
+        className="rounded-[24px] bg-surface-container-low border border-outline-variant p-8 space-y-4 shadow-melon"
+      >
+        <h3 className="text-lg font-bold text-on-surface m-0 flex items-center gap-2">
+          <span className="material-symbols-outlined text-primary">speed</span>
+          Wydajność testów
+        </h3>
+        <p className="text-sm text-on-surface-variant m-0">
+          Tryb dla słabszych komputerów. Nie zmienia treści wejściowej strony 1:1, ale
+          ogranicza koszt generacji (mniej tokenów, mniej prób, bez analizy obrazu PDF).
+        </p>
+        <label className="flex items-start gap-3 cursor-pointer">
+          <input
+            type="checkbox"
+            className="mt-1"
+            checked={lowSpecTestMode}
+            onChange={(e) => {
+              const enabled = e.target.checked;
+              setLowSpecTestMode(enabled);
+              setLowSpecTestModeEnabled(enabled);
+            }}
+          />
+          <span className="text-on-surface">
+            Włącz tryb słabszego komputera (szybciej, kosztem jakości pytań wizualnych)
+          </span>
+        </label>
+      </section>
+
+      <section
+        data-tour-id="tour-settings-help"
+        className="rounded-[24px] bg-surface-container-low border border-outline-variant p-8 space-y-4 shadow-melon"
+      >
+        <h3 className="text-lg font-bold text-on-surface m-0 flex items-center gap-2">
+          <span className="material-symbols-outlined text-primary">help</span>
+          Pomoc
+        </h3>
+        <p className="text-sm text-on-surface-variant m-0">
+          Mozesz ponownie uruchomic samouczek z interaktywnym demo PDF, fiszek i testow.
+        </p>
+        <button
+          type="button"
+          onClick={() => {
+            resetTutorialSeen();
+            setTutorialActive(true);
+            navigate("/app/dashboard");
+          }}
+          className="bg-primary text-on-primary font-bold px-6 py-3 rounded-xl"
+        >
+          Uruchom samouczek
+        </button>
+      </section>
+
       <section className="rounded-[24px] bg-surface-container-low border border-outline-variant p-8 shadow-melon">
         <h2 className="text-2xl font-extrabold text-on-surface m-0 flex items-center gap-2">
           <span className="material-symbols-outlined text-primary">settings</span>
@@ -382,7 +442,10 @@ export function Settings() {
         )}
       </section>
 
-      <section className="rounded-[24px] bg-surface-container-low border border-outline-variant p-8 space-y-4 shadow-melon">
+      <section
+        data-tour-id="tour-settings-updates"
+        className="rounded-[24px] bg-surface-container-low border border-outline-variant p-8 space-y-4 shadow-melon"
+      >
         <h3 className="text-lg font-bold text-on-surface m-0 flex items-center gap-2">
           <span className="material-symbols-outlined text-primary">system_update</span>
           Aktualizacje aplikacji
@@ -471,7 +534,10 @@ export function Settings() {
         )}
       </section>
 
-      <section className="rounded-[24px] bg-surface-container-low border border-outline-variant p-8 space-y-4 shadow-melon">
+      <section
+        data-tour-id="tour-settings-feedback"
+        className="rounded-[24px] bg-surface-container-low border border-outline-variant p-8 space-y-4 shadow-melon"
+      >
         <h3 className="text-lg font-bold text-on-surface m-0 flex items-center gap-2">
           <span className="material-symbols-outlined text-primary">chat</span>
           Zgłoś problem lub pomysł

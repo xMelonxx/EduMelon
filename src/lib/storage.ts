@@ -6,6 +6,9 @@ const KEY_MODEL = "edumelon_model_profile";
 const KEY_OLLAMA_MODELS_DIR = "edumelon_ollama_models_dir";
 const KEY_INSTALL_ID = "edumelon_install_id";
 const KEY_USAGE_STATS_CONSENT = "edumelon_usage_stats_consent";
+const KEY_LOW_SPEC_TEST_MODE = "edumelon_low_spec_test_mode";
+const KEY_TUTORIAL_SEEN = "edumelon_tutorial_seen";
+const KEY_TUTORIAL_ACTIVE = "edumelon_tutorial_active";
 
 export type LocalProfile = {
   displayName: string;
@@ -72,4 +75,36 @@ export function getUsageStatsConsent(): boolean {
 export function setUsageStatsConsent(enabled: boolean): void {
   if (enabled) localStorage.setItem(KEY_USAGE_STATS_CONSENT, "1");
   else localStorage.removeItem(KEY_USAGE_STATS_CONSENT);
+}
+
+export function getLowSpecTestModeEnabled(): boolean {
+  return localStorage.getItem(KEY_LOW_SPEC_TEST_MODE) === "1";
+}
+
+export function setLowSpecTestModeEnabled(enabled: boolean): void {
+  if (enabled) localStorage.setItem(KEY_LOW_SPEC_TEST_MODE, "1");
+  else localStorage.removeItem(KEY_LOW_SPEC_TEST_MODE);
+}
+
+export function getTutorialSeen(): boolean {
+  return localStorage.getItem(KEY_TUTORIAL_SEEN) === "1";
+}
+
+export function setTutorialSeen(seen: boolean): void {
+  if (seen) localStorage.setItem(KEY_TUTORIAL_SEEN, "1");
+  else localStorage.removeItem(KEY_TUTORIAL_SEEN);
+}
+
+export function resetTutorialSeen(): void {
+  localStorage.removeItem(KEY_TUTORIAL_SEEN);
+}
+
+export function isTutorialActive(): boolean {
+  return localStorage.getItem(KEY_TUTORIAL_ACTIVE) === "1";
+}
+
+export function setTutorialActive(active: boolean): void {
+  if (active) localStorage.setItem(KEY_TUTORIAL_ACTIVE, "1");
+  else localStorage.removeItem(KEY_TUTORIAL_ACTIVE);
+  window.dispatchEvent(new Event("edumelon:tutorial-active-changed"));
 }

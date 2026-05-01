@@ -100,6 +100,7 @@ export function TestsHub() {
                   </p>
                   <Link
                     to={`/app/tests/${p.id}`}
+                    data-tour-id="tour-tests-open"
                     className="bg-primary text-on-primary px-4 py-2 rounded-lg font-bold text-sm hover:scale-[1.02] active:scale-95 transition-all"
                   >
                     Otwórz test
