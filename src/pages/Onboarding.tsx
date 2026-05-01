@@ -9,7 +9,7 @@ import {
   type ModelProfileId,
 } from "../lib/constants";
 import { ensureOllamaRunning } from "../lib/ollamaAutostart";
-import { ollamaPull, ollamaTagsReachable } from "../lib/ollama";
+import { ollamaListModels, ollamaPull, ollamaTagsReachable } from "../lib/ollama";
 import { saveUsageStatsToSupabase } from "../lib/supabase";
 import {
   getOrCreateInstallId,
@@ -182,6 +182,14 @@ function formatBytes(bytes: number): string {
     idx++;
   }
   return `${value >= 10 || idx === 0 ? value.toFixed(0) : value.toFixed(1)} ${units[idx]}`;
+}
+
+function modelMatchesInstalled(installed: string, requested: string): boolean {
+  const i = installed.trim().toLowerCase();
+  const r = requested.trim().toLowerCase();
+  if (i === r) return true;
+  if (!r.includes(":") && i === `${r}:latest`) return true;
+  return false;
 }
 
 export function Onboarding() {
@@ -383,6 +391,11 @@ export function Onboarding() {
     });
     try {
       const tag = MODEL_PROFILES[profile].ollamaTag;
+      setPullLog([
+        `Plan pobierania:`,
+        `- model czatu: ${tag}`,
+        `- model embeddingów: ${EMBEDDING_MODEL}`,
+      ]);
       await ollamaPull(tag, (line) => {
         setPullLog((prev) => [...prev.slice(-40), line]);
         setPullProgress(
@@ -395,6 +408,12 @@ export function Onboarding() {
           },
         );
       });
+      const afterChat = await ollamaListModels();
+      if (!afterChat.some((m) => modelMatchesInstalled(m, tag))) {
+        throw new Error(
+          `Ollama nie potwierdziła instalacji wybranego modelu czatu (${tag}).`,
+        );
+      }
       setPullProgress({
         stage: "embedding",
         status: "Model czatu gotowy. Start pobierania embeddingów…",
@@ -414,6 +433,12 @@ export function Onboarding() {
           },
         );
       });
+      const afterEmbedding = await ollamaListModels();
+      if (!afterEmbedding.some((m) => modelMatchesInstalled(m, EMBEDDING_MODEL))) {
+        throw new Error(
+          `Ollama nie potwierdziła instalacji modelu embeddingów (${EMBEDDING_MODEL}).`,
+        );
+      }
       setPullProgress({
         stage: "embedding",
         status: "Modele pobrane pomyślnie.",
@@ -697,6 +722,11 @@ export function Onboarding() {
               Czat: <code>{MODEL_PROFILES[profile].ollamaTag}</code> · embed:{" "}
               <code>{EMBEDDING_MODEL}</code>
             </p>
+            <p className="text-[11px] text-on-surface-variant m-0">
+              Źródło tagów modeli: konfiguracja builda aplikacji (wartości
+              <code> VITE_OLLAMA_MODEL_*</code> oraz
+              <code> VITE_OLLAMA_EMBEDDING_MODEL</code>).
+            </p>
             <div className="rounded-2xl bg-surface-container-high px-4 py-3 space-y-2">
               <div className="flex items-center gap-2 text-sm text-on-surface">
                 <span className="material-symbols-outlined text-base text-primary">
@@ -754,10 +784,17 @@ export function Onboarding() {
                 </div>
               </div>
             )}
-            {pullLog.length > 0 && (
-              <pre className="text-[0.65rem] max-h-28 overflow-auto bg-surface-container-high rounded-xl p-3 m-0">
-                {pullLog.join("\n")}
-              </pre>
+            {(pulling || pullLog.length > 0) && (
+              <div className="rounded-2xl bg-black/85 text-green-200 border border-white/10 px-4 py-3 space-y-2">
+                <p className="m-0 text-[11px] uppercase tracking-wide font-bold text-green-300">
+                  Log terminala Ollama
+                </p>
+                <pre className="text-[0.7rem] leading-relaxed max-h-36 overflow-auto whitespace-pre-wrap break-all m-0 font-mono">
+                  {pullLog.length > 0
+                    ? pullLog.join("\n")
+                    : "Oczekiwanie na pierwszy log postępu…"}
+                </pre>
+              </div>
             )}
             {error && <p className="text-primary text-sm m-0">{error}</p>}
           </div>

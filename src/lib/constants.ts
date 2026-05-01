@@ -25,4 +25,4 @@ export const MODEL_PROFILES: Record<
 
 /** Embedding model for RAG (pull separately in Ollama). */
 export const EMBEDDING_MODEL =
-  import.meta.env.VITE_OLLAMA_EMBEDDING_MODEL ?? "nomic-embed-text";
+  import.meta.env.VITE_OLLAMA_EMBEDDING_MODEL ?? "nomic-embed-text:latest";

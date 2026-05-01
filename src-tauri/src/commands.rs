@@ -7,6 +7,7 @@ use std::path::PathBuf;
 use std::process::Command;
 use std::time::Duration;
 use sysinfo::System;
+use tauri::Emitter;
 
 #[derive(Debug, Serialize, Clone)]
 pub struct SlideChunk {
@@ -195,6 +196,57 @@ pub async fn ollama_pull_model(model: String) -> Result<String, String> {
         return Err(format!("pull zwrócił status {}", res.status()));
     }
     let _ = res.text().await;
+    Ok(format!("Model {} — pobieranie zakończone.", model))
+}
+
+#[tauri::command]
+pub async fn ollama_pull_model_stream(
+    app: tauri::AppHandle,
+    model: String,
+    request_id: String,
+) -> Result<String, String> {
+    let event_name = format!("ollama-pull-progress-{}", request_id);
+    let _ = app.emit(&event_name, r#"{"status":"Łączę z Ollamą...","completed":0,"total":0}"#);
+
+    let client = reqwest::Client::builder()
+        .timeout(std::time::Duration::from_secs(7200))
+        .build()
+        .map_err(|e| e.to_string())?;
+    let body = serde_json::json!({ "name": model, "stream": true });
+    let mut res = client
+        .post("http://127.0.0.1:11434/api/pull")
+        .json(&body)
+        .send()
+        .await
+        .map_err(|e| format!("Ollama nie odpowiada: {}", e))?;
+    if !res.status().is_success() {
+        return Err(format!("pull zwrócił status {}", res.status()));
+    }
+
+    let mut pending = String::new();
+    while let Some(chunk) = res
+        .chunk()
+        .await
+        .map_err(|e| format!("Błąd odczytu strumienia pull: {}", e))?
+    {
+        pending.push_str(&String::from_utf8_lossy(&chunk));
+        while let Some(pos) = pending.find('\n') {
+            let line = pending[..pos].trim().to_string();
+            pending = pending[(pos + 1)..].to_string();
+            if !line.is_empty() {
+                let _ = app.emit(&event_name, line);
+            }
+        }
+    }
+
+    let tail = pending.trim();
+    if !tail.is_empty() {
+        let _ = app.emit(&event_name, tail);
+    }
+    let _ = app.emit(
+        &event_name,
+        r#"{"status":"Pobieranie zakończone","completed":1,"total":1}"#,
+    );
     Ok(format!("Model {} — pobieranie zakończone.", model))
 }
 

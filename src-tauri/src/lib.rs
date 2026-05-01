@@ -17,6 +17,7 @@ pub fn run() {
             commands::write_text_file,
             commands::ollama_health,
             commands::ollama_pull_model,
+            commands::ollama_pull_model_stream,
             commands::ollama_embeddings,
             commands::configure_ollama_models_dir,
             commands::diagnose_ollama,

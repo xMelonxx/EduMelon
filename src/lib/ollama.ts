@@ -1,5 +1,6 @@
 import { OLLAMA_BASE_URL } from "./constants";
 import { invoke } from "@tauri-apps/api/core";
+import { listen } from "@tauri-apps/api/event";
 
 function isTauriRuntime(): boolean {
   return typeof window !== "undefined" && "__TAURI_INTERNALS__" in window;
@@ -35,9 +36,16 @@ export async function ollamaPull(
   onLine?: (line: string) => void,
 ): Promise<void> {
   if (isTauriRuntime()) {
+    const requestId = crypto.randomUUID();
+    const eventName = `ollama-pull-progress-${requestId}`;
+    const unlisten = await listen<string>(eventName, (event) => {
+      if (typeof event.payload === "string" && onLine) onLine(event.payload);
+    });
     try {
-      const result = await invoke<string>("ollama_pull_model", { model });
-      if (onLine) onLine(result);
+      await invoke<string>("ollama_pull_model_stream", {
+        model,
+        requestId,
+      });
       return;
     } catch (e) {
       throw new Error(
@@ -45,6 +53,8 @@ export async function ollamaPull(
           ? e.message
           : `Nie udało się pobrać modelu przez backend Tauri: ${String(e)}`,
       );
+    } finally {
+      unlisten();
     }
   }
 
