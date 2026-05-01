@@ -1,5 +1,6 @@
 use serde::Serialize;
 use std::env;
+use std::fs;
 use std::fs::File;
 use std::io::Read;
 use std::path::Path;
@@ -790,4 +791,57 @@ fn detect_gpu_names() -> Vec<String> {
         }
     }
     Vec::new()
+}
+
+#[tauri::command]
+pub fn cleanup_stale_update_temp_files(max_age_hours: Option<u64>) -> Result<u32, String> {
+    let ttl_hours = max_age_hours.unwrap_or(48);
+    let max_age = Duration::from_secs(ttl_hours.saturating_mul(3600));
+    let mut removed = 0u32;
+
+    let temp = env::temp_dir();
+    let entries = fs::read_dir(&temp).map_err(|e| e.to_string())?;
+
+    for entry in entries.flatten() {
+        let path = entry.path();
+        let name = path
+            .file_name()
+            .and_then(|n| n.to_str())
+            .unwrap_or_default()
+            .to_lowercase();
+
+        // Conservative cleanup: only obvious EduMelon updater artifacts.
+        let candidate_file = name.starts_with("edumelon_")
+            && (name.ends_with(".msi")
+                || name.ends_with("-setup.exe")
+                || name.ends_with(".exe.sig")
+                || name.ends_with(".msi.sig"));
+        let candidate_dir = name.starts_with("edumelon-updater")
+            || name.starts_with("tauri-updater")
+            || name.starts_with("edumelon_update");
+        if !(candidate_file || candidate_dir) {
+            continue;
+        }
+
+        let is_stale = entry
+            .metadata()
+            .ok()
+            .and_then(|m| m.modified().ok())
+            .and_then(|t| t.elapsed().ok())
+            .map(|age| age >= max_age)
+            .unwrap_or(false);
+        if !is_stale {
+            continue;
+        }
+
+        if path.is_dir() {
+            if fs::remove_dir_all(&path).is_ok() {
+                removed += 1;
+            }
+        } else if fs::remove_file(&path).is_ok() {
+            removed += 1;
+        }
+    }
+
+    Ok(removed)
 }

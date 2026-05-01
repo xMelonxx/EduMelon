@@ -25,6 +25,7 @@ pub fn run() {
             commands::configure_ollama_models_dir,
             commands::diagnose_ollama,
             commands::get_system_specs,
+            commands::cleanup_stale_update_temp_files,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

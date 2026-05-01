@@ -53,6 +53,25 @@ export async function checkForAppUpdate(): Promise<UpdaterCheckResult> {
   }
 }
 
+export async function checkForAppUpdateWithTimeout(
+  timeoutMs = 10_000,
+): Promise<UpdaterCheckResult> {
+  return await Promise.race<UpdaterCheckResult>([
+    checkForAppUpdate(),
+    new Promise<UpdaterCheckResult>((resolve) =>
+      setTimeout(
+        () =>
+          resolve({
+            kind: "unavailable",
+            currentVersion: "unknown",
+            reason: `Timeout sprawdzania aktualizacji po ${timeoutMs} ms`,
+          }),
+        timeoutMs,
+      ),
+    ),
+  ]);
+}
+
 export async function downloadAndInstallAppUpdate(
   onProgress?: (percent: number) => void,
 ): Promise<void> {

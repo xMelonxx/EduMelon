@@ -1,3 +1,4 @@
+import { invoke } from "@tauri-apps/api/core";
 import { useEffect, useState } from "react";
 import { NavLink, Outlet, useLocation } from "react-router-dom";
 import {
@@ -7,8 +8,9 @@ import {
 } from "../lib/theme";
 import { loadLocalProfile } from "../lib/storage";
 import {
-  checkForAppUpdate,
+  checkForAppUpdateWithTimeout,
   downloadAndInstallAppUpdate,
+  getCurrentAppVersion,
   relaunchAfterUpdate,
 } from "../lib/updater";
 
@@ -56,9 +58,8 @@ const navItems: NavDef[] = [
 ];
 
 const themeOrder: ThemePreference[] = ["light", "dark", "system"];
-const STARTUP_UPDATE_CHECK_KEY = "edumelon_last_update_check_ms";
-const STARTUP_UPDATE_CHECK_TTL_MS = 12 * 60 * 60 * 1000;
 const STARTUP_UPDATE_DISMISSED_VERSION_KEY = "edumelon_update_dismissed_version";
+const POST_UPDATE_CHANGELOG_KEY = "edumelon_post_update_changelog";
 
 function themeIcon(pref: ThemePreference): string {
   if (pref === "light") return "light_mode";
@@ -78,6 +79,11 @@ export function AppShell() {
   const [startupUpdateBusy, setStartupUpdateBusy] = useState(false);
   const [startupUpdateProgress, setStartupUpdateProgress] = useState<number | null>(null);
   const [startupUpdateError, setStartupUpdateError] = useState<string | null>(null);
+  const [startupCheckInFlight, setStartupCheckInFlight] = useState(false);
+  const [postUpdateNotice, setPostUpdateNotice] = useState<{
+    version: string;
+    body?: string;
+  } | null>(null);
 
   const cycleTheme = () => {
     const i = themeOrder.indexOf(themePref);
@@ -87,17 +93,52 @@ export function AppShell() {
   };
 
   useEffect(() => {
-    const now = Date.now();
-    const raw = localStorage.getItem(STARTUP_UPDATE_CHECK_KEY);
-    const last = raw ? Number(raw) : 0;
-    if (Number.isFinite(last) && now - last < STARTUP_UPDATE_CHECK_TTL_MS) return;
-    localStorage.setItem(STARTUP_UPDATE_CHECK_KEY, String(now));
+    const timer = setTimeout(() => {
+      if (startupCheckInFlight) return;
+      setStartupCheckInFlight(true);
+      void (async () => {
+        try {
+          // Best-effort cleanup; does not block startup.
+          try {
+            await invoke<number>("cleanup_stale_update_temp_files", {
+              maxAgeHours: 48,
+            });
+          } catch {
+            // ignore cleanup errors
+          }
+          const result = await checkForAppUpdateWithTimeout(10_000);
+          if (result.kind !== "available") return;
+          const dismissedVersion = localStorage.getItem(STARTUP_UPDATE_DISMISSED_VERSION_KEY);
+          if (dismissedVersion === result.version) return;
+          setStartupUpdate({ version: result.version, body: result.body });
+        } finally {
+          setStartupCheckInFlight(false);
+        }
+      })();
+    }, 4000);
+    return () => clearTimeout(timer);
+  }, []);
+
+  useEffect(() => {
     void (async () => {
-      const result = await checkForAppUpdate();
-      if (result.kind !== "available") return;
-      const dismissedVersion = localStorage.getItem(STARTUP_UPDATE_DISMISSED_VERSION_KEY);
-      if (dismissedVersion === result.version) return;
-      setStartupUpdate({ version: result.version, body: result.body });
+      const raw = localStorage.getItem(POST_UPDATE_CHANGELOG_KEY);
+      if (!raw) return;
+      try {
+        const parsed = JSON.parse(raw) as { version?: string; body?: string };
+        if (!parsed.version) {
+          localStorage.removeItem(POST_UPDATE_CHANGELOG_KEY);
+          return;
+        }
+        const currentVersion = await getCurrentAppVersion();
+        if (currentVersion === parsed.version) {
+          setPostUpdateNotice({ version: parsed.version, body: parsed.body });
+        }
+      } catch {
+        // ignore malformed values
+      } finally {
+        // Show once after successful restart into the expected version.
+        localStorage.removeItem(POST_UPDATE_CHANGELOG_KEY);
+      }
     })();
   }, []);
 
@@ -107,9 +148,17 @@ export function AppShell() {
     setStartupUpdateError(null);
     setStartupUpdateProgress(0);
     try {
+      localStorage.setItem(
+        POST_UPDATE_CHANGELOG_KEY,
+        JSON.stringify({
+          version: startupUpdate.version,
+          body: startupUpdate.body,
+        }),
+      );
       await downloadAndInstallAppUpdate((percent) => setStartupUpdateProgress(percent));
       await relaunchAfterUpdate();
     } catch (e) {
+      localStorage.removeItem(POST_UPDATE_CHANGELOG_KEY);
       setStartupUpdateError(e instanceof Error ? e.message : String(e));
       setStartupUpdateBusy(false);
     }
@@ -127,6 +176,31 @@ export function AppShell() {
 
   return (
     <div className="flex min-h-screen bg-surface text-on-surface">
+      {postUpdateNotice && (
+        <div className="fixed left-1/2 top-6 z-[90] w-[min(760px,calc(100vw-2rem))] -translate-x-1/2 rounded-2xl border border-outline-variant bg-surface-container-lowest shadow-melon p-4 space-y-3">
+          <p className="text-sm font-bold text-on-surface m-0">
+            Zaktualizowano aplikację do wersji {postUpdateNotice.version}
+          </p>
+          {postUpdateNotice.body?.trim() ? (
+            <pre className="text-xs whitespace-pre-wrap max-h-[40vh] overflow-y-auto rounded-xl bg-surface-container p-3 text-on-surface-variant m-0">
+              {postUpdateNotice.body.trim()}
+            </pre>
+          ) : (
+            <p className="text-xs text-on-surface-variant m-0">
+              Aktualizacja zakończona pomyślnie.
+            </p>
+          )}
+          <div className="flex justify-end">
+            <button
+              type="button"
+              onClick={() => setPostUpdateNotice(null)}
+              className="bg-primary text-on-primary font-bold px-4 py-2 rounded-xl text-xs"
+            >
+              OK
+            </button>
+          </div>
+        </div>
+      )}
       {startupUpdate && (
         <div className="fixed right-4 top-4 z-[80] w-[min(560px,calc(100vw-2rem))] rounded-2xl border border-outline-variant bg-surface-container-lowest shadow-melon p-4 space-y-3">
           <p className="text-sm font-bold text-on-surface m-0">

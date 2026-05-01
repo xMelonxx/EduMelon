@@ -1,0 +1,11 @@
+{
+  "version": "0.1.7",
+  "notes": "EduMelon 0.1.7\n\n- Startup update check now runs every app launch with timeout protection.\n- Added cleanup of stale updater temp files older than 48h.\n- Added post-update popup with changelog after restart.\n- Windows updater install mode set to passive for cleaner UX.\n- Improved test generation progress heartbeat and timeout behavior.\n",
+  "pub_date": "2026-05-01T13:05:00Z",
+  "platforms": {
+    "windows-x86_64": {
+      "signature": "dW50cnVzdGVkIGNvbW1lbnQ6IHNpZ25hdHVyZSBmcm9tIHRhdXJpIHNlY3JldCBrZXkKUlVTZEc3c0RCMVVta2U4M1N2RFFzYUxMdDExMTZCUkwrL2lsWU9INFlUY0htc1hVU3RFNFFzVlBjeTNIb3M0NWVnY2ROam9CekR1QnZVU2pVT29GQTNIRnJQa0ZJclArTWdBPQp0cnVzdGVkIGNvbW1lbnQ6IHRpbWVzdGFtcDoxNzc3NjQwNjU1CWZpbGU6RWR1TWVsb25fMC4xLjdfeDY0LXNldHVwLmV4ZQoyRjhxcmpqeVhvOFVGN21VZjVwRm5uMlprajA4bGh4MTRDWDdubllTbkh2Vml2SVJ1OEdEcHg0MTl0VE1BRXhoT2g4SWVTUk9sRjBLQzJNdFRKbnBBUT09Cg==",
+      "url": "https://github.com/xMelonxx/EduMelon/releases/download/v0.1.7/EduMelon_0.1.7_x64-setup.exe"
+    }
+  }
+}

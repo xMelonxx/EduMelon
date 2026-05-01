@@ -28,6 +28,9 @@ type TestGenerationOptions = {
   filePath?: string | null;
 };
 
+const TEST_GEN_CALL_TIMEOUT_MS = 90_000;
+const HEARTBEAT_MS = 3_000;
+
 function normalizeText(s: string): string {
   return (s || "").replace(/\s+/g, " ").trim();
 }
@@ -153,6 +156,23 @@ function dedupeQuestions(
   return out;
 }
 
+async function withTimeout<T>(
+  promise: Promise<T>,
+  timeoutMs: number,
+  label: string,
+): Promise<T> {
+  return new Promise<T>((resolve, reject) => {
+    const id = setTimeout(
+      () => reject(new Error(`${label}: timeout po ${timeoutMs} ms`)),
+      timeoutMs,
+    );
+    promise
+      .then((v) => resolve(v))
+      .catch((e) => reject(e))
+      .finally(() => clearTimeout(id));
+  });
+}
+
 export async function generateTestQuestionsFromChunks(
   model: string,
   chunks: ChunkRow[],
@@ -225,6 +245,19 @@ ${page.context}
     let generated: GeneratedTestQuestion[] = [];
     const attempts = 3;
     for (let a = 0; a < attempts; a++) {
+      const basePercent = 8 + Math.round(((i + 0.25 + a * 0.2) / pages.length) * 84);
+      let heartbeat = 0;
+      onProgress?.({
+        label: `Strona ${page.slide_index}: próba ${a + 1}/${attempts}…`,
+        percent: Math.min(94, basePercent),
+      });
+      const heartbeatId = setInterval(() => {
+        heartbeat += 1;
+        onProgress?.({
+          label: `Strona ${page.slide_index}: generuję pytania (${heartbeat * 3}s)…`,
+          percent: Math.min(94, basePercent),
+        });
+      }, HEARTBEAT_MS);
       try {
         let raw = "";
         if (
@@ -233,39 +266,49 @@ ${page.context}
           page.slide_index > 0
         ) {
           const pageImage = await pdfPageToImageBase64(options.filePath, page.slide_index);
-          raw = await ollamaChatWithImages(
-            model,
-            [
+          raw = await withTimeout(
+            ollamaChatWithImages(
+              model,
+              [
+                {
+                  role: "system",
+                  content:
+                    `${system} Oprócz tekstu dostajesz obraz strony — użyj go do pytań o elementy wizualne i wyznaczenia kadru.`,
+                },
+                { role: "user", content: user, images: [pageImage] },
+              ],
               {
-                role: "system",
-                content:
-                  `${system} Oprócz tekstu dostajesz obraz strony — użyj go do pytań o elementy wizualne i wyznaczenia kadru.`,
+                format: "json",
+                temperature: 0.25,
+                num_predict: 4096,
               },
-              { role: "user", content: user, images: [pageImage] },
-            ],
-            {
-              format: "json",
-              temperature: 0.25,
-              num_predict: 4096,
-            },
+            ),
+            TEST_GEN_CALL_TIMEOUT_MS,
+            `Generowanie pytań (strona ${page.slide_index})`,
           );
         } else {
-          raw = await ollamaChat(
-            model,
-            [
-              { role: "system", content: system },
-              { role: "user", content: user },
-            ],
-            {
-              format: "json",
-              temperature: 0.25,
-              num_predict: 4096,
-            },
+          raw = await withTimeout(
+            ollamaChat(
+              model,
+              [
+                { role: "system", content: system },
+                { role: "user", content: user },
+              ],
+              {
+                format: "json",
+                temperature: 0.25,
+                num_predict: 4096,
+              },
+            ),
+            TEST_GEN_CALL_TIMEOUT_MS,
+            `Generowanie pytań (strona ${page.slide_index})`,
           );
         }
         generated = parseQuestions(raw, page.slide_index);
       } catch {
         generated = [];
+      } finally {
+        clearInterval(heartbeatId);
       }
       if (generated.length >= target) break;
     }
