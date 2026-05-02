@@ -1,10 +1,10 @@
 {
   "version": "0.1.9",
   "notes": "EduMelon 0.1.9\n\n- Testy z PDF: wszystkie strony pliku (liczba z PDF), nie tylko strony z tekstem w chunkach.\n- Tryb słabszego komputera: wizja włączona z lżejszym obrazem (JPEG, limit rozdzielczości).\n- Przy wizji: pytania tylko z obrazu strony — bez duplikatu warstwy tekstowej w prompcie.\n",
-  "pub_date": "2026-05-02T15:00:00Z",
+  "pub_date": "2026-05-02T16:20:00Z",
   "platforms": {
     "windows-x86_64": {
-      "signature": "dW50cnVzdGVkIGNvbW1lbnQ6IHNpZ25hdHVyZSBmcm9tIHRhdXJpIHNlY3JldCBrZXkKUlVTZEc3c0RCMVVta2U3aDJaNlBzMnBJamJWVmtuMnVUdFNrVFdDVUd4cklOQzk3RlVGdllkejhscGtmVzd3OVc2T2lrb1RiaFRrL0J5LzFHaStIeU83SEhRVzg3UjNlZGdJPQp0cnVzdGVkIGNvbW1lbnQ6IHRpbWVzdGFtcDoxNzc3NjU5MzAzCWZpbGU6RWR1TWVsb25fMC4xLjhfeDY0LXNldHVwLmV4ZQpoOXlTY3ZrWkVmMTNxVkN3R1kzSnd2bFJmNlY0cUVFMTU0cDhLK2J5cHNRVTZzOHN1ZFFZRWc3V1NhNzBmWEdYRDlzZUdVRGEvNktncEh5bkZ5UnJEUT09Cg==",
+      "signature": "dW50cnVzdGVkIGNvbW1lbnQ6IHNpZ25hdHVyZSBmcm9tIHRhdXJpIHNlY3JldCBrZXkKUlVTZEc3c0RCMVVta1E4cHU1eHc2eXRZbUlwUngvNnJFdXppRTFQNUhaZlNDYUJuUTJnTWhGZktsLzVZUG5zbWdvY25tZHZOS0M0QUpOVDFQbFlEbUtRT01OREZjaEkwNWdzPQp0cnVzdGVkIGNvbW1lbnQ6IHRpbWVzdGFtcDoxNzc3NzMzNDUyCWZpbGU6RWR1TWVsb25fMC4xLjlfeDY0LXNldHVwLmV4ZQpFRExKbnptRlR4NkhMRUZxZVBINjhrL1dKY1duZ2hGdSsxUkNlUlB6OUw1STlmU0k3N2FBT0RiSnkxRmRYcVdsWmVybUV3VjhBd2w2NXM5QlNEckpBUT09Cg==",
       "url": "https://github.com/xMelonxx/EduMelon/releases/download/v0.1.9/EduMelon_0.1.9_x64-setup.exe"
     }
   }
