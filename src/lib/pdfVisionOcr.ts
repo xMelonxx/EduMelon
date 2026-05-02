@@ -15,31 +15,72 @@ function bytesToUint8Array(v: unknown): Uint8Array {
   throw new Error("Nieprawidłowy format danych PDF.");
 }
 
-async function renderPageToPngBase64(
+export type PdfPageImageOptions = {
+  /** Skala PDF.js (domyślnie 1.6). */
+  scale?: number;
+  /** Po wyrenderowaniu — jeśli dłuższy bok przekracza limit, skaluje w dół (RAM / vision). */
+  maxLongEdgePx?: number;
+  mimeType?: "image/png" | "image/jpeg";
+  /** 0–1, tylko dla JPEG (domyślnie 0.85). */
+  jpegQuality?: number;
+};
+
+/** Domyślny podgląd strony do wizji (ostrzejszy PNG). */
+export const PDF_PAGE_IMAGE_DEFAULT_OPTIONS = {
+  scale: 1.6,
+  mimeType: "image/png" as const,
+} satisfies PdfPageImageOptions;
+
+/**
+ * Mniejszy, skompresowany JPEG + limit rozdzielczości — mniej RAM i mniejszy transfer do Ollamy.
+ * Używane m.in. przy „trybie słabszego komputera” przy generowaniu testów (wizja włączona).
+ */
+export const PDF_PAGE_IMAGE_LOW_SPEC_OPTIONS: PdfPageImageOptions = {
+  scale: 1.2,
+  maxLongEdgePx: 1200,
+  mimeType: "image/jpeg",
+  jpegQuality: 0.84,
+};
+
+async function renderPageToImageBase64(
   doc: pdfjs.PDFDocumentProxy,
   pageNumber: number,
+  opts?: PdfPageImageOptions,
 ): Promise<string> {
   const page = await doc.getPage(pageNumber);
-  const viewport = page.getViewport({ scale: 1.6 });
+  const baseScale = opts?.scale ?? PDF_PAGE_IMAGE_DEFAULT_OPTIONS.scale;
+  let viewport = page.getViewport({ scale: baseScale });
+  const maxEdge = opts?.maxLongEdgePx;
+  if (maxEdge != null && maxEdge > 0) {
+    const longest = Math.max(viewport.width, viewport.height);
+    if (longest > maxEdge) {
+      viewport = page.getViewport({ scale: baseScale * (maxEdge / longest) });
+    }
+  }
   const canvas = document.createElement("canvas");
   const ctx = canvas.getContext("2d");
   if (!ctx) throw new Error("Brak canvas 2D.");
   canvas.width = Math.ceil(viewport.width);
   canvas.height = Math.ceil(viewport.height);
   await page.render({ canvasContext: ctx, viewport, canvas }).promise;
-  const dataUrl = canvas.toDataURL("image/png");
+  const mime = opts?.mimeType ?? "image/png";
+  const dataUrl =
+    mime === "image/jpeg"
+      ? canvas.toDataURL("image/jpeg", opts?.jpegQuality ?? 0.85)
+      : canvas.toDataURL("image/png");
   const b64 = dataUrl.split(",")[1] ?? "";
   if (!b64) throw new Error("Nie udało się wyrenderować obrazu strony.");
   return b64;
 }
 
 /**
- * Renderuje jedną stronę PDF do base64 PNG (bez data-url prefix).
+ * Renderuje jedną stronę PDF do base64 (PNG lub JPEG, bez data-url prefix).
  * Przydatne do pytań „co jest na stronie N?” z vision modelem.
  */
 export async function pdfPageToImageBase64(
   path: string,
   pageNumber: number,
+  renderOptions?: PdfPageImageOptions,
 ): Promise<string> {
   const raw = await invoke<unknown>("read_file_bytes", { path });
   const bytes = bytesToUint8Array(raw);
@@ -48,7 +89,16 @@ export async function pdfPageToImageBase64(
   if (pageNumber < 1 || pageNumber > doc.numPages) {
     throw new Error(`Nieprawidłowy numer strony: ${pageNumber}.`);
   }
-  return renderPageToPngBase64(doc, pageNumber);
+  return renderPageToImageBase64(doc, pageNumber, renderOptions);
+}
+
+/** Liczba stron w pliku PDF (ta sama ścieżka co przy renderze stron). */
+export async function pdfGetPageCount(path: string): Promise<number> {
+  const raw = await invoke<unknown>("read_file_bytes", { path });
+  const bytes = bytesToUint8Array(raw);
+  const loadingTask = pdfjs.getDocument({ data: bytes });
+  const doc = await loadingTask.promise;
+  return doc.numPages;
 }
 
 export type ImageCropPercent = {
@@ -129,7 +179,7 @@ export async function ocrPdfPagesWithVision(
     const pageNumber = pageNumbers[idx]!;
     if (pageNumber < 1 || pageNumber > doc.numPages) continue;
     options?.onProgress?.(idx + 1, pageNumbers.length, pageNumber);
-    const imageB64 = await renderPageToPngBase64(doc, pageNumber);
+    const imageB64 = await renderPageToImageBase64(doc, pageNumber);
     const text = await withTimeout(
       ollamaChatWithImages(
         model,

@@ -1,6 +1,10 @@
 import type { ChunkRow } from "./db";
 import { ollamaChat, ollamaChatWithImages } from "./ollama";
-import { pdfPageToImageBase64 } from "./pdfVisionOcr";
+import {
+  pdfGetPageCount,
+  pdfPageToImageBase64,
+  PDF_PAGE_IMAGE_LOW_SPEC_OPTIONS,
+} from "./pdfVisionOcr";
 import { getLowSpecTestModeEnabled } from "./storage";
 
 export type TestGenProgress = {
@@ -31,6 +35,8 @@ type TestGenerationOptions = {
 
 const TEST_GEN_CALL_TIMEOUT_MS = 90_000;
 const HEARTBEAT_MS = 3_000;
+/** Bez obrazu opieramy się wyłącznie na tekście z ingestu. */
+const MAX_PAGE_CONTEXT_CHARS_TEXT = 12000;
 
 type TestPerfProfile = {
   attempts: number;
@@ -184,8 +190,10 @@ function getTestPerfProfile(): TestPerfProfile {
   if (getLowSpecTestModeEnabled()) {
     return {
       attempts: 2,
-      numPredict: 1200,
-      allowVision: false,
+      /** Wystarczy na tablicę JSON z 2 pytaniami; wyżej niż stare 1200, żeby nie ucinało odpowiedzi. */
+      numPredict: 2400,
+      /** Wizja włączona — OCR/czytanie strony idzie przez model multimodalny; RAM oszczędzamy lżejszym JPEG (patrz pdfPageToImageBase64 + PDF_PAGE_IMAGE_LOW_SPEC_OPTIONS). */
+      allowVision: true,
     };
   }
   return {
@@ -210,13 +218,34 @@ export async function generateTestQuestionsFromChunks(
     if (!grouped.has(page)) grouped.set(page, []);
     grouped.get(page)!.push(body);
   }
-  const pages = [...grouped.entries()]
-    .map(([slide_index, bodies]) => ({
-      slide_index,
-      context: normalizeText(bodies.join("\n\n")).slice(0, 12000),
-    }))
-    .filter((p) => p.context.length > 60)
-    .sort((a, b) => a.slide_index - b.slide_index);
+
+  const isPdfWithFile =
+    options?.sourceKind?.toLowerCase() === "pdf" && !!options.filePath;
+
+  let pages: { slide_index: number; context: string }[];
+
+  if (isPdfWithFile && options.filePath) {
+    const numPages = await pdfGetPageCount(options.filePath);
+    if (numPages < 1) {
+      throw new Error("PDF nie zawiera żadnej strony.");
+    }
+    pages = [];
+    for (let p = 1; p <= numPages; p++) {
+      const bodies = grouped.get(p);
+      const context = bodies?.length
+        ? normalizeText(bodies.join("\n\n"))
+        : "";
+      pages.push({ slide_index: p, context });
+    }
+  } else {
+    pages = [...grouped.entries()]
+      .map(([slide_index, bodies]) => ({
+        slide_index,
+        context: normalizeText(bodies.join("\n\n")),
+      }))
+      .filter((p) => p.context.length > 60)
+      .sort((a, b) => a.slide_index - b.slide_index);
+  }
 
   if (pages.length === 0) {
     throw new Error("Brak treści do wygenerowania testu.");
@@ -230,11 +259,16 @@ export async function generateTestQuestionsFromChunks(
       label: `Tworzę pytania testowe ze strony ${page.slide_index} (${target})…`,
       percent: 8 + Math.round(((i + 0.2) / pages.length) * 84),
     });
+    const useVision =
+      perf.allowVision &&
+      options?.sourceKind?.toLowerCase() === "pdf" &&
+      options.filePath &&
+      page.slide_index > 0;
+
     const system =
       "Jesteś generatorem pytań testowych ABCD po polsku. Zwracasz WYŁĄCZNIE tablicę JSON.";
-    const user = `Na podstawie kontekstu utwórz DOKŁADNIE ${target} pytań testowych wielokrotnego wyboru.
 
-Format JSON:
+    const jsonAndRules = `Format JSON:
 [
   {
     "question":"...",
@@ -258,11 +292,21 @@ Zasady:
 - unikaj "wszystkie powyższe" i "żadne z powyższych";
 - jeśli pytanie dotyczy grafiki/diagramu/wykresu/tabeli, ustaw requires_image=true i podaj kadr (crop_x/y/w/h) tego elementu w procentach strony;
 - jeśli pytanie nie dotyczy grafiki, ustaw requires_image=false i zostaw crop_* jako 0;
-- nie używaj markdown.
+- nie używaj markdown.`;
+
+    const user = useVision
+      ? `Na podstawie WYŁĄCZNIE przesłanego obrazu strony ${page.slide_index} utwórz DOKŁADNIE ${target} pytań testowych wielokrotnego wyboru. Odczytaj treść z obrazu (tekst, tabela, wykres). Nie ma osobnej warstwy tekstowej w tym pytaniu.
+
+${jsonAndRules}
+
+To jest strona ${page.slide_index} w dokumencie — pytania muszą wynikać tylko z tego, co widać na obrazie.`
+      : `Na podstawie kontekstu utwórz DOKŁADNIE ${target} pytań testowych wielokrotnego wyboru.
+
+${jsonAndRules}
 
 Kontekst strony ${page.slide_index}:
 ---
-${page.context}
+${page.context.slice(0, MAX_PAGE_CONTEXT_CHARS_TEXT).trim()}
 ---`;
 
     let generated: GeneratedTestQuestion[] = [];
@@ -289,7 +333,13 @@ ${page.context}
           options.filePath &&
           page.slide_index > 0
         ) {
-          const pageImage = await pdfPageToImageBase64(options.filePath, page.slide_index);
+          const pageImage = await pdfPageToImageBase64(
+            options.filePath,
+            page.slide_index,
+            getLowSpecTestModeEnabled()
+              ? PDF_PAGE_IMAGE_LOW_SPEC_OPTIONS
+              : undefined,
+          );
           raw = await withTimeout(
             ollamaChatWithImages(
               model,
@@ -297,7 +347,7 @@ ${page.context}
                 {
                   role: "system",
                   content:
-                    `${system} Oprócz tekstu dostajesz obraz strony — użyj go do pytań o elementy wizualne i wyznaczenia kadru.`,
+                    `${system} Masz tylko obraz jednej strony PDF — odczytaj z niego treść i kadruj elementy wizualne przy requires_image.`,
                 },
                 { role: "user", content: user, images: [pageImage] },
               ],

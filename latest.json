@@ -1,11 +1,11 @@
 {
-  "version": "0.1.8",
-  "notes": "EduMelon 0.1.8\n\n- Added first-run interactive tutorial with step-by-step module walkthrough.\n- Added demo mode screens for PDF+chatbot, flashcards, and tests with deterministic mock data.\n- Added tutorial restart entry in Settings (Help section).\n- Added low-spec tests mode toggle in Settings (fewer retries/tokens, optional vision-off path).\n- Improved tutorial targeting, lighter overlay, and auto-scroll to highlighted elements.\n",
-  "pub_date": "2026-05-01T18:13:00Z",
+  "version": "0.1.9",
+  "notes": "EduMelon 0.1.9\n\n- Testy z PDF: wszystkie strony pliku (liczba z PDF), nie tylko strony z tekstem w chunkach.\n- Tryb słabszego komputera: wizja włączona z lżejszym obrazem (JPEG, limit rozdzielczości).\n- Przy wizji: pytania tylko z obrazu strony — bez duplikatu warstwy tekstowej w prompcie.\n",
+  "pub_date": "2026-05-02T15:00:00Z",
   "platforms": {
     "windows-x86_64": {
       "signature": "dW50cnVzdGVkIGNvbW1lbnQ6IHNpZ25hdHVyZSBmcm9tIHRhdXJpIHNlY3JldCBrZXkKUlVTZEc3c0RCMVVta2U3aDJaNlBzMnBJamJWVmtuMnVUdFNrVFdDVUd4cklOQzk3RlVGdllkejhscGtmVzd3OVc2T2lrb1RiaFRrL0J5LzFHaStIeU83SEhRVzg3UjNlZGdJPQp0cnVzdGVkIGNvbW1lbnQ6IHRpbWVzdGFtcDoxNzc3NjU5MzAzCWZpbGU6RWR1TWVsb25fMC4xLjhfeDY0LXNldHVwLmV4ZQpoOXlTY3ZrWkVmMTNxVkN3R1kzSnd2bFJmNlY0cUVFMTU0cDhLK2J5cHNRVTZzOHN1ZFFZRWc3V1NhNzBmWEdYRDlzZUdVRGEvNktncEh5bkZ5UnJEUT09Cg==",
-      "url": "https://github.com/xMelonxx/EduMelon/releases/download/v0.1.8/EduMelon_0.1.8_x64-setup.exe"
+      "url": "https://github.com/xMelonxx/EduMelon/releases/download/v0.1.9/EduMelon_0.1.9_x64-setup.exe"
     }
   }
 }

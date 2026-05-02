@@ -374,8 +374,9 @@ export function Settings() {
           Wydajność testów
         </h3>
         <p className="text-sm text-on-surface-variant m-0">
-          Tryb dla słabszych komputerów. Nie zmienia treści wejściowej strony 1:1, ale
-          ogranicza koszt generacji (mniej tokenów, mniej prób, bez analizy obrazu PDF).
+          Tryb dla słabszych komputerów: dalej wysyłamy stronę PDF do modelu (odczyt
+          skanów i elementów graficznych), ale w niższej rozdzielczości i JPEG, mniej
+          tokenów w odpowiedzi i mniej ponowień — mniej RAM i mniejsze obciążenie Ollamy.
         </p>
         <label className="flex items-start gap-3 cursor-pointer">
           <input
@@ -389,7 +390,8 @@ export function Settings() {
             }}
           />
           <span className="text-on-surface">
-            Włącz tryb słabszego komputera (szybciej, kosztem jakości pytań wizualnych)
+            Włącz tryb słabszego komputera (lżejszy obraz strony, mniej kosztowna
+            generacja)
           </span>
         </label>
       </section>
