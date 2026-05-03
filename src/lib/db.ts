@@ -586,6 +586,22 @@ export async function saveTestQuestionBank(
   );
 }
 
+/** Kasuje pytania testowe, metadane `tests` oraz historię podejść dla prezentacji (DEV / ponowna generacja). */
+export async function clearTestDataForPresentation(
+  presentationId: string,
+): Promise<void> {
+  const db = await getDb();
+  await db.execute(`DELETE FROM test_attempts WHERE presentation_id = $1`, [
+    presentationId,
+  ]);
+  await db.execute(`DELETE FROM test_questions WHERE presentation_id = $1`, [
+    presentationId,
+  ]);
+  await db.execute(`DELETE FROM tests WHERE presentation_id = $1`, [
+    presentationId,
+  ]);
+}
+
 export async function saveTestAttempt(
   presentationId: string,
   scorePercent: number,

@@ -5,14 +5,9 @@ import {
   insertPresentation,
   type ChunkRow,
 } from "./db";
-import { MODEL_PROFILES } from "./constants";
-import { ocrPdfPagesWithVision } from "./pdfVisionOcr";
 import { chunkPlainText, embedText } from "./rag";
-import { loadLocalProfile } from "./storage";
 
 type SlideChunk = { slide_index: number; text: string };
-const OCR_VISION_MIN_TEXT_CHARS_PER_PAGE = 90;
-const OCR_VISION_MAX_PAGES = 8;
 
 export type IngestProgress = {
   label: string;
@@ -35,8 +30,8 @@ function buildImageOnlyHint(kind: "pdf" | "pptx"): string {
   const label = kind === "pdf" ? "PDF" : "PPTX";
   const ocrNote =
     kind === "pdf"
-      ? "Dla PDF aplikacja próbuje też OCR (vision) na stronach obrazowych, ale to zależy od lokalnego modelu i jakości obrazu."
-      : "Dla PPTX (na ten moment) odczyt działa tylko z warstwy tekstowej slajdów.";
+      ? "Skany i slajdy graficzne możesz potem przeanalizować przy generowaniu testów (wizja strony); do importu potrzebna jest minimalna warstwa tekstowa."
+      : "Dla PPTX odczyt działa z warstwy tekstowej slajdów.";
   return (
     `Wykryto bardzo mało tekstu w pliku ${label}. ` +
     "Materiał wygląda na slajdy/skany jako obrazy, których parser tekstu nie odczytuje. " +
@@ -74,42 +69,7 @@ export async function ingestFileFromPath(
     pdfText = await invoke<string>("extract_pdf_text", { path });
     report("Rozpoznaję strony PDF…", 16);
     slideChunks = await invoke<SlideChunk[]>("extract_pdf_pages_text", { path });
-    // OCR vision fallback: strony z małą ilością tekstu (np. skan/obraz slajdu).
-    try {
-      const profile = loadLocalProfile();
-      const model =
-        profile?.modelProfile
-          ? MODEL_PROFILES[profile.modelProfile].ollamaTag
-          : MODEL_PROFILES["e2b-it"].ollamaTag;
-      const pagesToOcr = slideChunks
-        .filter((s) => countMeaningfulChars(s.text) < OCR_VISION_MIN_TEXT_CHARS_PER_PAGE)
-        .map((s) => s.slide_index)
-        .filter((n, i, arr) => arr.indexOf(n) === i)
-        .slice(0, OCR_VISION_MAX_PAGES);
-      if (pagesToOcr.length > 0) {
-        report(
-          `Uruchamiam OCR obrazów (${pagesToOcr.length} stron)…`,
-          24,
-        );
-        const ocrByPage = await ocrPdfPagesWithVision(path, model, pagesToOcr, {
-          onProgress: (current, total, pageNumber) => {
-            const pct = 24 + Math.round((current / Math.max(1, total)) * 8);
-            report(`OCR strony ${pageNumber} (${current}/${total})…`, pct);
-          },
-          perPageTimeoutMs: 45_000,
-        });
-        if (ocrByPage.size > 0) {
-          slideChunks = slideChunks.map((s) => {
-            const ocr = ocrByPage.get(s.slide_index);
-            if (!ocr) return s;
-            const merged = normalizeSpaces([s.text, ocr].filter(Boolean).join(" "));
-            return { ...s, text: merged };
-          });
-        }
-      }
-    } catch {
-      // OCR to fallback best-effort; nie przerywamy importu gdy vision jest niedostępne.
-    }
+    /** Ciężkie OCR/wizja przy imporcie celowo wyłączone — wystarczy warstwa tekstowa PDF do podglądu/RAG; skany i grafiki obsługiwane przy generowaniu testów. */
   } else {
     throw new Error("Obsługiwane są pliki PDF i PPTX.");
   }

@@ -205,6 +205,210 @@ export async function ollamaChatWithImages(
   return data.message?.content ?? "";
 }
 
+/** Fragment strumienia chat z Ollamy (`content` = odpowiedź, `thinking` = proces u niektórych modeli). */
+export type ChatStreamDelta = {
+  kind: "content" | "thinking";
+  delta: string;
+};
+
+function parseChatStreamPayload(payload: unknown): ChatStreamDelta | null {
+  if (payload == null) return null;
+  if (typeof payload === "object" && payload !== null && "kind" in payload && "delta" in payload) {
+    const k = (payload as { kind: string; delta: string }).kind;
+    const d = (payload as { kind: string; delta: string }).delta;
+    if ((k === "content" || k === "thinking") && typeof d === "string" && d.length > 0) {
+      return { kind: k, delta: d };
+    }
+  }
+  return null;
+}
+
+/** Chat ze strumieniowaniem tokenów (jak w podglądzie Ollamy). */
+export async function ollamaChatStream(
+  model: string,
+  messages: { role: string; content: string }[],
+  options: OllamaChatOptions | undefined,
+  onDelta: (d: ChatStreamDelta) => void,
+): Promise<void> {
+  if (isTauriRuntime()) {
+    const requestId = crypto.randomUUID();
+    const eventName = `ollama-chat-stream-${requestId}`;
+    const unlisten = await listen<unknown>(eventName, (event) => {
+      const d = parseChatStreamPayload(event.payload);
+      if (d) onDelta(d);
+    });
+    try {
+      await invoke("ollama_chat_stream_backend", {
+        model,
+        messages,
+        options: options ?? null,
+        requestId,
+      });
+      return;
+    } finally {
+      unlisten();
+    }
+  }
+
+  const body: Record<string, unknown> = {
+    model,
+    messages,
+    stream: true,
+  };
+  if (options?.format !== undefined) body.format = options.format;
+  const ollamaOpts: Record<string, unknown> = {};
+  if (options?.temperature !== undefined)
+    ollamaOpts.temperature = options.temperature;
+  if (options?.num_predict !== undefined)
+    ollamaOpts.num_predict = options.num_predict;
+  if (Object.keys(ollamaOpts).length > 0) body.options = ollamaOpts;
+
+  const r = await fetch(`${OLLAMA_BASE_URL}/api/chat`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(body),
+  });
+  if (!r.ok || !r.body) {
+    const t = await r.text();
+    throw new Error(`chat stream: ${r.status} ${t}`);
+  }
+  const reader = r.body.getReader();
+  const decoder = new TextDecoder();
+  let pending = "";
+  for (;;) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    pending += decoder.decode(value, { stream: true });
+    for (;;) {
+      const nl = pending.indexOf("\n");
+      if (nl === -1) break;
+      const line = pending.slice(0, nl).trim();
+      pending = pending.slice(nl + 1);
+      if (!line) continue;
+      try {
+        const v = JSON.parse(line) as {
+          message?: { content?: string; thinking?: string };
+        };
+        const msg = v.message;
+        if (msg?.content)
+          onDelta({ kind: "content", delta: msg.content });
+        if (msg?.thinking)
+          onDelta({ kind: "thinking", delta: msg.thinking });
+      } catch {
+        /* jedna linia uszkodzona — pomiń */
+      }
+    }
+  }
+  const tail = pending.trim();
+  if (tail) {
+    try {
+      const v = JSON.parse(tail) as {
+        message?: { content?: string; thinking?: string };
+      };
+      if (v.message?.content)
+        onDelta({ kind: "content", delta: v.message.content });
+      if (v.message?.thinking)
+        onDelta({ kind: "thinking", delta: v.message.thinking });
+    } catch {
+      /* ignore */
+    }
+  }
+}
+
+/** Chat vision ze strumieniowaniem. */
+export async function ollamaChatWithImagesStream(
+  model: string,
+  messages: OllamaImageMessage[],
+  options: OllamaChatOptions | undefined,
+  onDelta: (d: ChatStreamDelta) => void,
+): Promise<void> {
+  if (isTauriRuntime()) {
+    const requestId = crypto.randomUUID();
+    const eventName = `ollama-chat-stream-${requestId}`;
+    const unlisten = await listen<unknown>(eventName, (event) => {
+      const d = parseChatStreamPayload(event.payload);
+      if (d) onDelta(d);
+    });
+    try {
+      await invoke("ollama_chat_with_images_stream_backend", {
+        model,
+        messages,
+        options: options ?? null,
+        requestId,
+      });
+      return;
+    } finally {
+      unlisten();
+    }
+  }
+
+  const body: Record<string, unknown> = {
+    model,
+    messages,
+    stream: true,
+  };
+  if (options?.format !== undefined) body.format = options.format;
+  const ollamaOpts: Record<string, unknown> = {};
+  if (options?.temperature !== undefined) {
+    ollamaOpts.temperature = options.temperature;
+  }
+  if (options?.num_predict !== undefined) {
+    ollamaOpts.num_predict = options.num_predict;
+  }
+  if (Object.keys(ollamaOpts).length > 0) body.options = ollamaOpts;
+
+  const r = await fetch(`${OLLAMA_BASE_URL}/api/chat`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(body),
+  });
+  if (!r.ok || !r.body) {
+    const t = await r.text();
+    throw new Error(`chat vision stream: ${r.status} ${t}`);
+  }
+  const reader = r.body.getReader();
+  const decoder = new TextDecoder();
+  let pending = "";
+  for (;;) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    pending += decoder.decode(value, { stream: true });
+    for (;;) {
+      const nl = pending.indexOf("\n");
+      if (nl === -1) break;
+      const line = pending.slice(0, nl).trim();
+      pending = pending.slice(nl + 1);
+      if (!line) continue;
+      try {
+        const v = JSON.parse(line) as {
+          message?: { content?: string; thinking?: string };
+        };
+        const msg = v.message;
+        if (msg?.content)
+          onDelta({ kind: "content", delta: msg.content });
+        if (msg?.thinking)
+          onDelta({ kind: "thinking", delta: msg.thinking });
+      } catch {
+        /* ignore */
+      }
+    }
+  }
+  const tail = pending.trim();
+  if (tail) {
+    try {
+      const v = JSON.parse(tail) as {
+        message?: { content?: string; thinking?: string };
+      };
+      if (v.message?.content)
+        onDelta({ kind: "content", delta: v.message.content });
+      if (v.message?.thinking)
+        onDelta({ kind: "thinking", delta: v.message.thinking });
+    } catch {
+      /* ignore */
+    }
+  }
+}
+
 export async function ollamaEmbeddings(
   model: string,
   prompt: string,

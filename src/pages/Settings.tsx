@@ -374,9 +374,10 @@ export function Settings() {
           Wydajność testów
         </h3>
         <p className="text-sm text-on-surface-variant m-0">
-          Tryb dla słabszych komputerów: dalej wysyłamy stronę PDF do modelu (odczyt
-          skanów i elementów graficznych), ale w niższej rozdzielczości i JPEG, mniej
-          tokenów w odpowiedzi i mniej ponowień — mniej RAM i mniejsze obciążenie Ollamy.
+          Przy testach z PDF obraz strony idzie do modelu tylko tam, gdzie trzeba (mało
+          tekstu z pliku albo slajd z dużą grafiką). Na zwykłych stronach tekstowych
+          pytania powstają z tekstu — szybciej. Tryb słabszego komputera: jeszcze
+          mniejszy JPEG i mniej ponowień przy tej samej logice.
         </p>
         <label className="flex items-start gap-3 cursor-pointer">
           <input
@@ -394,6 +395,11 @@ export function Settings() {
             generacja)
           </span>
         </label>
+        <p className="text-xs text-on-surface-variant m-0">
+          Na słabszym sprzęcie sensowne jest też ustawienie profilu modelu na{" "}
+          <strong className="font-semibold text-on-surface">Gemma 4 E2B IT</strong>{" "}
+          (powyżej) — lżejszy tag Ollamy niż wariant E4B.
+        </p>
       </section>
 
       <section

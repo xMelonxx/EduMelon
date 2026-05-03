@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { Link, useParams } from "react-router-dom";
 import { Document, Page, pdfjs } from "react-pdf";
@@ -13,6 +13,7 @@ import {
   saveTestAttempt,
   saveTestQuestionBank,
   listWrongAnswersForAttempt,
+  clearTestDataForPresentation,
   type TestAttemptQuestionReviewRow,
   type TestAttemptRow,
   type TestQuestionOption,
@@ -23,9 +24,11 @@ import { loadLocalProfile } from "../lib/storage";
 import {
   generateTestQuestionsFromChunks,
   type TestGenProgress,
+  type TestGenerationOptions,
 } from "../lib/testsOllama";
 import {
   cropImageBase64ByPercent,
+  pdfGetPageCount,
   pdfPageToImageBase64,
 } from "../lib/pdfVisionOcr";
 import { isDevToolsEnabled } from "../lib/devtools";
@@ -43,6 +46,77 @@ type ResultState = {
 
 type QuizMode = "all" | "wrong_only";
 type ViewMode = "quiz" | "review_all" | "review_wrong";
+
+type QuestionVisualFields = {
+  requires_image: number;
+  crop_x: number | null;
+  crop_y: number | null;
+  crop_w: number | null;
+  crop_h: number | null;
+};
+
+/** Kadr % strony zapisany przez model — pokazujemy nawet gdy requires_image było 0 (modele często się mylą). */
+function hasValidImageCrop(q: QuestionVisualFields): boolean {
+  const cx = q.crop_x;
+  const cy = q.crop_y;
+  const cw = q.crop_w;
+  const ch = q.crop_h;
+  if (cx == null || cy == null || cw == null || ch == null) return false;
+  return (
+    Number.isFinite(cx) &&
+    Number.isFinite(cy) &&
+    Number.isFinite(cw) &&
+    Number.isFinite(ch) &&
+    cx >= 0 &&
+    cy >= 0 &&
+    cw > 0 &&
+    ch > 0 &&
+    cx + cw <= 100 &&
+    cy + ch <= 100
+  );
+}
+
+type QuestionWithVisualHint = QuestionVisualFields & {
+  question: string;
+  slide_index?: number | null;
+};
+
+/**
+ * Model często zwraca requires_image=0 i bez crop mimo pytania „co widać na wykresie…”.
+ * Heurystyka treści — nie zastępuje poprawnego JSON z kadrem, ale ratuje wyświetlanie.
+ */
+function questionTextLikelyAboutFigure(question: string): boolean {
+  const t = question.trim();
+  if (t.length < 6) return false;
+  return (
+    /\b(obraz|obrazu|obrazek|rysun|wykres|diagram|grafik|ilustrac|schemat|fotograf|zdję|zdjec|wizualn|slajd)\w*\b/i.test(
+      t,
+    ) ||
+    /\b(figure|chart|graph|image|photograph|illustration)\b/i.test(t) ||
+    /\b(mikrograf|micrograph)\w*\b/i.test(t) ||
+    /\b(widać\s+(na|w)|na\s+(rysunku|wykresie|ilustracji|obrazku|zdjęciu)|patrz(ąc)?\s+na|prezentowan|przedstawion(y|a)\s+na)\b/i.test(
+      t,
+    )
+  );
+}
+
+/** Kadr do snippetu: zapisany % albo pełna strona, gdy pytanie jest „graficzne” albo requires_image bez crop. */
+function resolveVisualCropPercent(
+  q: QuestionWithVisualHint,
+  isPdf: boolean,
+): { x: number; y: number; w: number; h: number } | null {
+  if (hasValidImageCrop(q)) {
+    return { x: q.crop_x!, y: q.crop_y!, w: q.crop_w!, h: q.crop_h! };
+  }
+  if (!isPdf || q.slide_index == null || q.slide_index < 1) return null;
+  if (q.requires_image === 1) {
+    return { x: 0, y: 0, w: 100, h: 100 };
+  }
+  if (questionTextLikelyAboutFigure(q.question)) {
+    return { x: 0, y: 0, w: 100, h: 100 };
+  }
+  return null;
+}
 
 function randomOption(): TestQuestionOption {
   const opts: TestQuestionOption[] = ["A", "B", "C", "D"];
@@ -71,6 +145,39 @@ export function Tests() {
   const [latestAttempt, setLatestAttempt] = useState<TestAttemptRow | null>(null);
   const [latestReview, setLatestReview] = useState<TestAttemptQuestionReviewRow[]>([]);
   const [viewMode, setViewMode] = useState<ViewMode>("quiz");
+  /** DEV: generuj test tylko dla wybranego zakresu stron/slajdów (Tests + session devtools). */
+  const [devRestrictTestRange, setDevRestrictTestRange] = useState(false);
+  const [devTestPageStart, setDevTestPageStart] = useState("1");
+  const [devTestPageEnd, setDevTestPageEnd] = useState("");
+  const [pdfPageCountDev, setPdfPageCountDev] = useState<number | null>(null);
+  const [devTestLogs, setDevTestLogs] = useState<string[]>([]);
+  const [devLastGeneratedJson, setDevLastGeneratedJson] = useState<string | null>(
+    null,
+  );
+  const devLogPreRef = useRef<HTMLPreElement>(null);
+
+  const appendDevLog = useCallback((line: string) => {
+    const stamp = new Date().toISOString();
+    setDevTestLogs((prev) => [...prev, `[${stamp}] ${line}`]);
+  }, []);
+
+  useEffect(() => {
+    const el = devLogPreRef.current;
+    if (el) el.scrollTop = el.scrollHeight;
+  }, [devTestLogs]);
+
+  const downloadDevGeneratedJson = useCallback(() => {
+    if (!devLastGeneratedJson) return;
+    const blob = new Blob([devLastGeneratedJson], {
+      type: "application/json;charset=utf-8",
+    });
+    const a = document.createElement("a");
+    const url = URL.createObjectURL(blob);
+    a.href = url;
+    a.download = `edumelon-test-${(id ?? "export").replace(/[^a-zA-Z0-9-_]/g, "").slice(0, 12) || "export"}-${Date.now()}.json`;
+    a.click();
+    URL.revokeObjectURL(url);
+  }, [devLastGeneratedJson, id]);
 
   const load = async () => {
     if (!id) return;
@@ -146,7 +253,26 @@ export function Tests() {
     setVisualCache({});
   }, [filePath, id]);
 
+  useEffect(() => {
+    if (!devToolsEnabled || !filePath || sourceKind.toLowerCase() !== "pdf") {
+      setPdfPageCountDev(null);
+      return;
+    }
+    let cancelled = false;
+    void pdfGetPageCount(filePath).then((n) => {
+      if (!cancelled) setPdfPageCountDev(n);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [devToolsEnabled, filePath, sourceKind]);
+
   const current = questions[idx];
+  const isPdfMaterial = sourceKind.toLowerCase() === "pdf";
+  const currentResolvedCrop = useMemo(() => {
+    if (!current) return null;
+    return resolveVisualCropPercent(current, isPdfMaterial);
+  }, [current, isPdfMaterial]);
   const answeredCount = useMemo(
     () => Object.keys(answers).length,
     [answers],
@@ -157,15 +283,49 @@ export function Tests() {
     setStage("in_progress");
     setError(null);
     setResult(null);
+    if (devToolsEnabled) {
+      setDevLastGeneratedJson(null);
+      setDevTestLogs([
+        `[${new Date().toISOString()}] Strumień Ollamy — linie 💭 to rozumowanie modelu (pole „thinking”; nie każdy model/tagi je zwracają).`,
+      ]);
+    }
     try {
       const chunks = await listChunksForPresentation(id);
       const model = MODEL_PROFILES[profile.modelProfile].ollamaTag;
+      const genOpts: TestGenerationOptions = { sourceKind, filePath };
+      if (devToolsEnabled && devRestrictTestRange) {
+        const start = Math.max(1, parseInt(devTestPageStart, 10) || 1);
+        let endNum = parseInt(devTestPageEnd.trim(), 10);
+        if (!Number.isFinite(endNum)) {
+          if (sourceKind.toLowerCase() === "pdf" && filePath) {
+            endNum =
+              pdfPageCountDev ?? (await pdfGetPageCount(filePath));
+          } else {
+            endNum = chunks.reduce(
+              (m, c) => Math.max(m, c.slide_index ?? 1),
+              1,
+            );
+          }
+        }
+        if (endNum < start) {
+          throw new Error(
+            'DEV: pole „Do strony” musi być ≥ „Od strony”.',
+          );
+        }
+        genOpts.devPageRange = { start, end: endNum };
+      }
+      if (devToolsEnabled) {
+        genOpts.onDevLog = appendDevLog;
+      }
       const generated = await generateTestQuestionsFromChunks(
         model,
         chunks,
         (p) => setGenProgress(p),
-        { sourceKind, filePath },
+        genOpts,
       );
+      if (devToolsEnabled) {
+        setDevLastGeneratedJson(JSON.stringify(generated, null, 2));
+      }
       await saveTestQuestionBank(
         id,
         generated.map((q) => ({
@@ -187,10 +347,50 @@ export function Tests() {
       );
       await load();
     } catch (e) {
-      setError(e instanceof Error ? e.message : String(e));
+      const msg = e instanceof Error ? e.message : String(e);
+      setError(msg);
+      if (devToolsEnabled) {
+        appendDevLog(`BŁĄD (przerwanie): ${msg}`);
+      }
     } finally {
       setStage("idle");
       setGenProgress(null);
+    }
+  };
+
+  const deleteTestBankDev = async () => {
+    if (!id || !devToolsEnabled) return;
+    if (
+      !window.confirm(
+        "Usunąć cały test dla tego materiału? Zniknie też historia podejść.",
+      )
+    ) {
+      return;
+    }
+    try {
+      await clearTestDataForPresentation(id);
+      await load();
+      setError(null);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : String(e));
+    }
+  };
+
+  const regenerateTestDev = async () => {
+    if (!id || !profile || !devToolsEnabled) return;
+    if (
+      !window.confirm(
+        "Wygenerować test od zera? Obecny zestaw i historia podejść zostaną usunięte przed generowaniem.",
+      )
+    ) {
+      return;
+    }
+    try {
+      await clearTestDataForPresentation(id);
+      await load();
+      await generateQuestions();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : String(e));
     }
   };
 
@@ -265,27 +465,30 @@ export function Tests() {
 
   useEffect(() => {
     const q = current;
-    if (!q || q.requires_image !== 1) return;
+    if (!q) return;
+    const crop = resolveVisualCropPercent(q, isPdfMaterial);
+    if (!crop) return;
     void ensureVisualSnippet(`q:${q.id}`, q.slide_index, {
-      x: q.crop_x,
-      y: q.crop_y,
-      w: q.crop_w,
-      h: q.crop_h,
+      x: crop.x,
+      y: crop.y,
+      w: crop.w,
+      h: crop.h,
     });
-  }, [current, filePath, sourceKind]);
+  }, [current, filePath, sourceKind, isPdfMaterial]);
 
   useEffect(() => {
     if (!result) return;
     for (const w of result.wrong) {
-      if (w.requires_image !== 1) continue;
+      const crop = resolveVisualCropPercent(w, isPdfMaterial);
+      if (!crop) continue;
       void ensureVisualSnippet(`w:${w.question_id}`, w.slide_index, {
-        x: w.crop_x,
-        y: w.crop_y,
-        w: w.crop_w,
-        h: w.crop_h,
+        x: crop.x,
+        y: crop.y,
+        w: crop.w,
+        h: crop.h,
       });
     }
-  }, [result, filePath, sourceKind]);
+  }, [result, filePath, sourceKind, isPdfMaterial]);
 
   /** DEV-only helper: losowo zaznacza odpowiedzi, żeby szybko testować cały flow. */
   const fillRandomAnswersDev = () => {
@@ -388,11 +591,147 @@ export function Tests() {
               <h1 className="text-h2 font-heading font-semibold">{title || "Test z prezentacji"}</h1>
             </header>
 
+            {devToolsEnabled && questionBank.length > 0 && (
+              <section className="rounded-xl border border-dashed border-outline-variant bg-surface-container/50 p-4 space-y-3">
+                <div className="flex flex-wrap items-center gap-3">
+                  <span className="text-xs font-semibold text-primary uppercase tracking-wide">
+                    DEV
+                  </span>
+                  <button
+                    type="button"
+                    disabled={stage === "in_progress"}
+                    onClick={() => void deleteTestBankDev()}
+                    className="rounded-lg border border-error/40 bg-error/10 px-4 py-2 text-sm font-semibold text-error hover:bg-error/15 disabled:opacity-50"
+                  >
+                    Usuń test
+                  </button>
+                  <button
+                    type="button"
+                    disabled={stage === "in_progress"}
+                    onClick={() => void regenerateTestDev()}
+                    className="rounded-lg border border-primary/40 bg-primary/10 px-4 py-2 text-sm font-semibold text-primary hover:bg-primary/15 disabled:opacity-50"
+                  >
+                    Wygeneruj ponownie
+                  </button>
+                </div>
+                <div className="rounded-lg border border-outline-variant/40 bg-surface-container-low/70 p-3 space-y-3">
+                  <label className="flex items-start gap-3 text-sm text-on-surface cursor-pointer">
+                    <input
+                      type="checkbox"
+                      className="mt-1"
+                      checked={devRestrictTestRange}
+                      disabled={stage === "in_progress"}
+                      onChange={(e) => setDevRestrictTestRange(e.target.checked)}
+                    />
+                    <span>
+                      Ogranicz zakres stron / slajdów przy ponownym generowaniu
+                    </span>
+                  </label>
+                  {devRestrictTestRange && (
+                    <div className="flex flex-wrap items-end gap-4 pl-1">
+                      <label className="flex flex-col gap-1 text-xs text-on-surface-variant">
+                        Od (włącznie)
+                        <input
+                          type="number"
+                          min={1}
+                          value={devTestPageStart}
+                          disabled={stage === "in_progress"}
+                          onChange={(e) => setDevTestPageStart(e.target.value)}
+                          className="w-24 rounded-lg border border-outline-variant bg-surface-container px-3 py-2 text-on-surface text-sm"
+                        />
+                      </label>
+                      <label className="flex flex-col gap-1 text-xs text-on-surface-variant">
+                        Do (włącznie)
+                        <input
+                          type="number"
+                          min={1}
+                          value={devTestPageEnd}
+                          disabled={stage === "in_progress"}
+                          onChange={(e) => setDevTestPageEnd(e.target.value)}
+                          placeholder="auto"
+                          className="w-24 rounded-lg border border-outline-variant bg-surface-container px-3 py-2 text-on-surface text-sm"
+                        />
+                      </label>
+                      {pdfPageCountDev != null &&
+                        sourceKind.toLowerCase() === "pdf" && (
+                          <p className="text-xs text-on-surface-variant self-end pb-1">
+                            PDF: {pdfPageCountDev} str. — puste „Do” = ostatnia strona
+                          </p>
+                        )}
+                      {sourceKind.toLowerCase() !== "pdf" && (
+                        <p className="text-xs text-on-surface-variant self-end pb-1 max-w-xs">
+                          Puste „Do” = ostatni slajd z treścią w chunkach
+                        </p>
+                      )}
+                    </div>
+                  )}
+                </div>
+                <p className="text-xs text-on-surface-variant m-0">
+                  „Wygeneruj ponownie” najpierw czyści bank pytań, potem generuje — uwzględnia powyższy zakres, jeśli jest włączony.
+                </p>
+              </section>
+            )}
+
             {questions.length === 0 && (
               <section className="rounded-[24px] bg-surface-container-low border border-outline-variant p-container-padding space-y-4">
                 <p className="text-on-surface">
                   Ten materiał nie ma jeszcze wygenerowanego testu.
                 </p>
+                {devToolsEnabled && (
+                  <div className="rounded-xl border border-dashed border-outline-variant bg-surface-container/40 p-4 space-y-3">
+                    <label className="flex items-start gap-3 text-sm text-on-surface cursor-pointer">
+                      <input
+                        type="checkbox"
+                        className="mt-1"
+                        checked={devRestrictTestRange}
+                        disabled={stage === "in_progress"}
+                        onChange={(e) => setDevRestrictTestRange(e.target.checked)}
+                      />
+                      <span>
+                        <span className="font-semibold text-primary">DEV</span>
+                        : generuj tylko z zakresu stron (PDF) / slajdów (PPTX itd.)
+                      </span>
+                    </label>
+                    {devRestrictTestRange && (
+                      <div className="flex flex-wrap items-end gap-4 pl-1">
+                        <label className="flex flex-col gap-1 text-xs text-on-surface-variant">
+                          Od (włącznie)
+                          <input
+                            type="number"
+                            min={1}
+                            value={devTestPageStart}
+                            disabled={stage === "in_progress"}
+                            onChange={(e) => setDevTestPageStart(e.target.value)}
+                            className="w-24 rounded-lg border border-outline-variant bg-surface-container px-3 py-2 text-on-surface text-sm"
+                          />
+                        </label>
+                        <label className="flex flex-col gap-1 text-xs text-on-surface-variant">
+                          Do (włącznie)
+                          <input
+                            type="number"
+                            min={1}
+                            value={devTestPageEnd}
+                            disabled={stage === "in_progress"}
+                            onChange={(e) => setDevTestPageEnd(e.target.value)}
+                            placeholder="auto"
+                            className="w-24 rounded-lg border border-outline-variant bg-surface-container px-3 py-2 text-on-surface text-sm"
+                          />
+                        </label>
+                        {pdfPageCountDev != null &&
+                          sourceKind.toLowerCase() === "pdf" && (
+                            <p className="text-xs text-on-surface-variant self-end pb-1">
+                              PDF: {pdfPageCountDev} str. — puste „Do” = ostatnia strona
+                            </p>
+                          )}
+                        {sourceKind.toLowerCase() !== "pdf" && (
+                          <p className="text-xs text-on-surface-variant self-end pb-1 max-w-xs">
+                            Puste „Do” = ostatni slajd z treścią w chunkach
+                          </p>
+                        )}
+                      </div>
+                    )}
+                  </div>
+                )}
                 <button
                   type="button"
                   disabled={stage === "in_progress"}
@@ -513,7 +852,7 @@ export function Tests() {
                         Strona {current.slide_index ?? "?"}
                       </span>
                     </div>
-                    {current.requires_image === 1 && (
+                    {currentResolvedCrop && (
                       <div className="relative w-full max-w-3xl aspect-[21/9] rounded-xl overflow-hidden border border-outline-variant bg-surface-container-high">
                         {visualCache[`q:${current.id}`] ? (
                           <img
@@ -691,6 +1030,7 @@ export function Tests() {
                               : w.selected_option === "C"
                                 ? w.option_c
                                 : w.option_d;
+                        const wrongCrop = resolveVisualCropPercent(w, isPdfMaterial);
                         return (
                           <article
                             key={w.question_id}
@@ -720,13 +1060,17 @@ export function Tests() {
                               <p className="text-sm text-on-surface-variant">{w.explanation}</p>
                             )}
                             <div className="rounded-xl bg-white overflow-hidden min-h-[160px] grid place-items-center p-2">
-                              {w.requires_image === 1 && visualCache[`w:${w.question_id}`] ? (
+                              {wrongCrop && visualCache[`w:${w.question_id}`] ? (
                                 <img
                                   src={`data:image/png;base64,${visualCache[`w:${w.question_id}`]}`}
                                   alt="Wycięty fragment strony dla pytania"
                                   className="w-full h-auto rounded-lg"
                                 />
-                              ) : sourceKind.toLowerCase() === "pdf" && pdfBlobUrl && w.slide_index ? (
+                              ) : wrongCrop ? (
+                                <p className="text-xs text-on-surface-variant px-3 text-center">
+                                  Ładuję fragment strony…
+                                </p>
+                              ) : isPdfMaterial && pdfBlobUrl && w.slide_index ? (
                                 <Document file={pdfBlobUrl}>
                                   <Page
                                     pageNumber={Math.max(1, w.slide_index)}
@@ -749,6 +1093,55 @@ export function Tests() {
                     </div>
                   )}
                 </section>
+              </section>
+            )}
+
+            {devToolsEnabled && (
+              <section className="rounded-[24px] border border-dashed border-outline-variant bg-surface-container-low/70 p-container-padding space-y-3">
+                <div className="flex flex-wrap items-center justify-between gap-3">
+                  <h3 className="text-sm font-semibold text-primary flex items-center gap-2">
+                    <span className="material-symbols-outlined text-lg" aria-hidden>
+                      terminal
+                    </span>
+                    DEV — konsola generowania testu
+                  </h3>
+                  <div className="flex flex-wrap gap-2">
+                    <button
+                      type="button"
+                      disabled={devTestLogs.length === 0}
+                      onClick={() => setDevTestLogs([])}
+                      className="rounded-lg border border-outline-variant px-3 py-2 text-xs font-semibold text-on-surface disabled:opacity-40"
+                    >
+                      Wyczyść log
+                    </button>
+                    <button
+                      type="button"
+                      disabled={!devLastGeneratedJson}
+                      onClick={downloadDevGeneratedJson}
+                      className="rounded-lg border border-primary/40 bg-primary/10 px-3 py-2 text-xs font-semibold text-primary disabled:opacity-40"
+                    >
+                      Pobierz JSON (ostatnie wygenerowanie)
+                    </button>
+                  </div>
+                </div>
+                <pre
+                  ref={devLogPreRef}
+                  className="max-h-64 overflow-auto rounded-xl bg-surface-container-highest/90 p-3 text-[11px] font-mono leading-relaxed text-on-surface border border-outline-variant/50"
+                >
+                  {devTestLogs.length === 0 ? (
+                    <span className="text-on-surface-variant">
+                      Brak wpisów. Uruchom generowanie testu — logi pojawią się na bieżąco.
+                    </span>
+                  ) : (
+                    devTestLogs.join("\n")
+                  )}
+                </pre>
+                {devLastGeneratedJson && (
+                  <p className="text-xs text-on-surface-variant">
+                    Ostatni wynik w pamięci: {devLastGeneratedJson.length} znaków JSON
+                    (pobierz plik, zanim wygenerujesz test ponownie).
+                  </p>
+                )}
               </section>
             )}
           </section>

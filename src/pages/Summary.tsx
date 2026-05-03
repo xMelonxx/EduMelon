@@ -14,7 +14,12 @@ import {
   type ChunkRow,
 } from "../lib/db";
 import { MODEL_PROFILES } from "../lib/constants";
-import { ollamaChat, ollamaChatWithImages } from "../lib/ollama";
+import {
+  ollamaChat,
+  ollamaChatStream,
+  ollamaChatWithImagesStream,
+  type ChatStreamDelta,
+} from "../lib/ollama";
 import { pdfPageToImageBase64 } from "../lib/pdfVisionOcr";
 import { buildSummaryFormatterPrompt, buildSummaryPrompt } from "../lib/prompts";
 import { loadLocalProfile } from "../lib/storage";
@@ -33,6 +38,10 @@ type SummaryStage =
 type ChatMessage = {
   role: "user" | "ai" | "error";
   content: string;
+  /** Opcjonalny łańcuch „myślenia” z modeli reasoning (strumień). */
+  thinking?: string;
+  /** Trwa zapis tokenów z Ollamy — wtedy treść rośnie na żywo. */
+  streaming?: boolean;
 };
 
 function normalizeAiMarkdown(raw: string): string {
@@ -282,7 +291,9 @@ export function Summary() {
     };
     const pendingMsg: ChatMessage = {
       role: "ai",
-      content: "_AI analizuje pytanie..._",
+      content: "",
+      thinking: "",
+      streaming: true,
     };
     setChatOut((prev) => [...prev, userMsg, pendingMsg]);
     setChatBusy(true);
@@ -293,6 +304,51 @@ export function Summary() {
     );
     setChatElapsed(0);
     setChatIn("");
+
+    const applyDelta = (d: ChatStreamDelta) => {
+      setChatOut((prev) => {
+        const copy = [...prev];
+        for (let i = copy.length - 1; i >= 0; i--) {
+          const m = copy[i];
+          if (m?.role === "ai" && m.streaming) {
+            if (d.kind === "thinking") {
+              copy[i] = {
+                ...m,
+                thinking: (m.thinking ?? "") + d.delta,
+              };
+            } else {
+              copy[i] = {
+                ...m,
+                content: m.content + d.delta,
+              };
+            }
+            break;
+          }
+        }
+        return copy;
+      });
+    };
+
+    const finalizeAiMessage = () => {
+      setChatOut((prev) => {
+        const copy = [...prev];
+        for (let i = copy.length - 1; i >= 0; i--) {
+          const m = copy[i];
+          if (m?.role === "ai" && m.streaming) {
+            const thinking = m.thinking?.trim();
+            copy[i] = {
+              role: "ai",
+              content: m.content.trim() || "Brak odpowiedzi.",
+              ...(thinking ? { thinking } : {}),
+              streaming: false,
+            };
+            break;
+          }
+        }
+        return copy;
+      });
+    };
+
     try {
       const model = MODEL_PROFILES[profile.modelProfile].ollamaTag;
       let context = "";
@@ -302,23 +358,24 @@ export function Summary() {
         const top = await retrieveTopK(q, chunks, 6);
         context = top.map((c) => c.body).join("\n\n---\n\n");
       }
-      setChatStatus("Generuję odpowiedź AI…");
+      setChatStatus("Generuję odpowiedź (strumień)…");
       const scopeLabel =
         chatScope === "page"
           ? `kontekst strony ${currentPage}`
           : "kontekst całego dokumentu";
       const baseSystemPrompt =
         "Jesteś pomocnym asystentem nauki po polsku. Odpowiadaj na podstawie przekazanego kontekstu i nie zmyślaj danych spoza materiału. W tym systemie fragmenty mogą zawierać znaczniki 'Strona N:' — traktuj je jako prawdziwe numery stron i odnoś się do nich dosłownie.";
-      let reply = "";
+      const chatOpts = { temperature: 0.2, num_predict: 4096 };
+
       if (chatScope === "page" && sourceKind.toLowerCase() === "pdf" && filePath) {
         try {
-          setChatStatus(`Analizuję obraz strony ${currentPage} + kontekst tekstowy…`);
+          setChatStatus(`Strona ${currentPage}: obraz + tekst (strumień)…`);
           let pageImage = pageImageCacheRef.current.get(currentPage);
           if (!pageImage) {
             pageImage = await pdfPageToImageBase64(filePath, currentPage);
             pageImageCacheRef.current.set(currentPage, pageImage);
           }
-          reply = await ollamaChatWithImages(
+          await ollamaChatWithImagesStream(
             model,
             [
               {
@@ -333,46 +390,62 @@ export function Summary() {
               },
               { role: "user", content: q },
             ],
-            { temperature: 0.2, num_predict: 4096 },
+            chatOpts,
+            applyDelta,
           );
         } catch {
-          setChatStatus("Nie udało się odczytać obrazu strony — przechodzę na sam tekst…");
-          reply = await ollamaChat(model, [
+          setChatStatus("Bez obrazu strony — odpowiedź z tekstu…");
+          setChatOut((prev) => {
+            const copy = [...prev];
+            for (let i = copy.length - 1; i >= 0; i--) {
+              if (copy[i]?.role === "ai" && copy[i]?.streaming) {
+                copy[i] = {
+                  role: "ai",
+                  content: "",
+                  thinking: "",
+                  streaming: true,
+                };
+                break;
+              }
+            }
+            return copy;
+          });
+          await ollamaChatStream(
+            model,
+            [
+              { role: "system", content: baseSystemPrompt },
+              {
+                role: "user",
+                content: `Tryb: ${scopeLabel}\n\nKontekst:\n${context || "(brak kontekstu)"}`,
+              },
+              { role: "user", content: q },
+            ],
+            chatOpts,
+            applyDelta,
+          );
+        }
+      } else {
+        await ollamaChatStream(
+          model,
+          [
             { role: "system", content: baseSystemPrompt },
             {
               role: "user",
               content: `Tryb: ${scopeLabel}\n\nKontekst:\n${context || "(brak kontekstu)"}`,
             },
             { role: "user", content: q },
-          ]);
-        }
-      } else {
-        reply = await ollamaChat(model, [
-          { role: "system", content: baseSystemPrompt },
-          {
-            role: "user",
-            content: `Tryb: ${scopeLabel}\n\nKontekst:\n${context || "(brak kontekstu)"}`,
-          },
-          { role: "user", content: q },
-        ]);
+          ],
+          chatOpts,
+          applyDelta,
+        );
       }
-      setChatOut((prev) => {
-        const copy = [...prev];
-        for (let i = copy.length - 1; i >= 0; i--) {
-          if (copy[i]?.role === "ai" && copy[i]?.content === "_AI analizuje pytanie..._") {
-            copy[i] = { role: "ai", content: reply.trim() || "Brak odpowiedzi." };
-            return copy;
-          }
-        }
-        copy.push({ role: "ai", content: reply.trim() || "Brak odpowiedzi." });
-        return copy;
-      });
+      finalizeAiMessage();
     } catch (e) {
       const errMsg = e instanceof Error ? e.message : String(e);
       setChatOut((prev) => {
         const copy = [...prev];
         for (let i = copy.length - 1; i >= 0; i--) {
-          if (copy[i]?.role === "ai" && copy[i]?.content === "_AI analizuje pytanie..._") {
+          if (copy[i]?.role === "ai" && copy[i]?.streaming) {
             copy[i] = { role: "error", content: errMsg };
             return copy;
           }
@@ -674,10 +747,34 @@ export function Summary() {
                   }
                 >
                   {msg.role === "ai" ? (
-                    <div className="text-[15px] leading-7 prose prose-invert prose-p:my-2 prose-headings:my-2 prose-ul:my-2 prose-ol:my-2 max-w-none">
-                      <ReactMarkdown remarkPlugins={[remarkGfm]}>
-                        {msg.content}
-                      </ReactMarkdown>
+                    <div className="text-[15px] leading-7 max-w-none space-y-2">
+                      {msg.thinking && msg.thinking.length > 0 ? (
+                        <details
+                          className="rounded-xl bg-surface-container-high/80 border border-outline-variant/30 px-3 py-2 text-xs text-on-surface-variant open:border-primary/30"
+                          open={!!msg.streaming}
+                        >
+                          <summary className="cursor-pointer font-semibold text-on-surface-variant select-none">
+                            {msg.streaming
+                              ? "Przebieg rozumowania modelu…"
+                              : "Przebieg rozumowania modelu"}
+                          </summary>
+                          <pre className="mt-2 whitespace-pre-wrap font-mono text-[13px] leading-relaxed text-on-surface-variant/95 max-h-48 overflow-y-auto">
+                            {msg.thinking}
+                          </pre>
+                        </details>
+                      ) : null}
+                      {msg.streaming ? (
+                        <div className="whitespace-pre-wrap text-on-surface leading-relaxed">
+                          {msg.content}
+                          <span className="inline-block w-2 h-4 ml-0.5 align-middle bg-primary/70 animate-pulse rounded-sm" />
+                        </div>
+                      ) : (
+                        <div className="prose prose-invert prose-p:my-2 prose-headings:my-2 prose-ul:my-2 prose-ol:my-2 max-w-none">
+                          <ReactMarkdown remarkPlugins={[remarkGfm]}>
+                            {msg.content}
+                          </ReactMarkdown>
+                        </div>
+                      )}
                     </div>
                   ) : (
                     msg.content

@@ -22,6 +22,8 @@ pub fn run() {
             commands::ollama_embeddings,
             commands::ollama_chat_backend,
             commands::ollama_chat_with_images_backend,
+            commands::ollama_chat_stream_backend,
+            commands::ollama_chat_with_images_stream_backend,
             commands::configure_ollama_models_dir,
             commands::diagnose_ollama,
             commands::get_system_specs,

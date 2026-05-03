@@ -448,6 +448,172 @@ pub async fn ollama_chat_with_images_backend(
         .to_string())
 }
 
+#[derive(Debug, Clone, serde::Serialize)]
+struct ChatStreamDeltaPayload {
+    pub kind: String,
+    pub delta: String,
+}
+
+fn emit_ollama_chat_stream_line(
+    app: &tauri::AppHandle,
+    event_name: &str,
+    line: &str,
+) -> Result<(), String> {
+    let v: serde_json::Value =
+        serde_json::from_str(line).map_err(|e| format!("Nieprawidłowy JSON ze strumienia: {}", e))?;
+    if let Some(msg) = v.get("message") {
+        if let Some(c) = msg.get("content").and_then(|x| x.as_str()) {
+            if !c.is_empty() {
+                let _ = app.emit(
+                    event_name,
+                    ChatStreamDeltaPayload {
+                        kind: "content".into(),
+                        delta: c.to_string(),
+                    },
+                );
+            }
+        }
+        if let Some(t) = msg.get("thinking").and_then(|x| x.as_str()) {
+            if !t.is_empty() {
+                let _ = app.emit(
+                    event_name,
+                    ChatStreamDeltaPayload {
+                        kind: "thinking".into(),
+                        delta: t.to_string(),
+                    },
+                );
+            }
+        }
+    }
+    Ok(())
+}
+
+async fn drain_ollama_chat_stream(
+    app: &tauri::AppHandle,
+    event_name: &str,
+    mut res: reqwest::Response,
+) -> Result<(), String> {
+    let mut pending = String::new();
+    while let Some(chunk) = res
+        .chunk()
+        .await
+        .map_err(|e| format!("Błąd odczytu strumienia chat: {}", e))?
+    {
+        pending.push_str(&String::from_utf8_lossy(&chunk));
+        while let Some(pos) = pending.find('\n') {
+            let line = pending[..pos].trim().to_string();
+            pending = pending[(pos + 1)..].to_string();
+            if !line.is_empty() {
+                emit_ollama_chat_stream_line(app, event_name, &line)?;
+            }
+        }
+    }
+    let tail = pending.trim();
+    if !tail.is_empty() {
+        emit_ollama_chat_stream_line(app, event_name, tail)?;
+    }
+    Ok(())
+}
+
+/// Strumień `/api/chat` (jak w UI Ollamy) — zdarzenia `ollama-chat-stream-{request_id}` z `{ kind, delta }`.
+#[tauri::command]
+pub async fn ollama_chat_stream_backend(
+    app: tauri::AppHandle,
+    model: String,
+    messages: Vec<OllamaChatMessage>,
+    options: Option<OllamaChatOptionsPayload>,
+    request_id: String,
+) -> Result<(), String> {
+    let event_name = format!("ollama-chat-stream-{}", request_id);
+    let client = reqwest::Client::builder()
+        .timeout(Duration::from_secs(300))
+        .build()
+        .map_err(|e| e.to_string())?;
+
+    let mut body = serde_json::json!({
+        "model": model,
+        "messages": messages,
+        "stream": true,
+    });
+    if let Some(opts) = options {
+        if let Some(format) = opts.format {
+            body["format"] = format;
+        }
+        if opts.temperature.is_some() || opts.num_predict.is_some() {
+            let mut o = serde_json::Map::new();
+            if let Some(t) = opts.temperature {
+                o.insert("temperature".to_string(), serde_json::json!(t));
+            }
+            if let Some(n) = opts.num_predict {
+                o.insert("num_predict".to_string(), serde_json::json!(n));
+            }
+            body["options"] = serde_json::Value::Object(o);
+        }
+    }
+
+    let res = client
+        .post("http://127.0.0.1:11434/api/chat")
+        .json(&body)
+        .send()
+        .await
+        .map_err(|e| format!("Ollama chat (stream) nie odpowiada: {}", e))?;
+    if !res.status().is_success() {
+        let status = res.status();
+        let text = res.text().await.unwrap_or_default();
+        return Err(format!("chat stream: {} {}", status, text));
+    }
+    drain_ollama_chat_stream(&app, &event_name, res).await
+}
+
+#[tauri::command]
+pub async fn ollama_chat_with_images_stream_backend(
+    app: tauri::AppHandle,
+    model: String,
+    messages: Vec<OllamaImageMessage>,
+    options: Option<OllamaChatOptionsPayload>,
+    request_id: String,
+) -> Result<(), String> {
+    let event_name = format!("ollama-chat-stream-{}", request_id);
+    let client = reqwest::Client::builder()
+        .timeout(Duration::from_secs(300))
+        .build()
+        .map_err(|e| e.to_string())?;
+
+    let mut body = serde_json::json!({
+        "model": model,
+        "messages": messages,
+        "stream": true,
+    });
+    if let Some(opts) = options {
+        if let Some(format) = opts.format {
+            body["format"] = format;
+        }
+        if opts.temperature.is_some() || opts.num_predict.is_some() {
+            let mut o = serde_json::Map::new();
+            if let Some(t) = opts.temperature {
+                o.insert("temperature".to_string(), serde_json::json!(t));
+            }
+            if let Some(n) = opts.num_predict {
+                o.insert("num_predict".to_string(), serde_json::json!(n));
+            }
+            body["options"] = serde_json::Value::Object(o);
+        }
+    }
+
+    let res = client
+        .post("http://127.0.0.1:11434/api/chat")
+        .json(&body)
+        .send()
+        .await
+        .map_err(|e| format!("Ollama chat vision (stream) nie odpowiada: {}", e))?;
+    if !res.status().is_success() {
+        let status = res.status();
+        let text = res.text().await.unwrap_or_default();
+        return Err(format!("chat vision stream: {} {}", status, text));
+    }
+    drain_ollama_chat_stream(&app, &event_name, res).await
+}
+
 #[tauri::command]
 pub async fn configure_ollama_models_dir(path: String) -> Result<String, String> {
     let trimmed = path.trim();

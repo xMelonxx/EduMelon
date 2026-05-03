@@ -11,13 +11,16 @@ import {
 } from "../lib/db";
 import { MODEL_PROFILES } from "../lib/constants";
 import { generateFlashcardsFromMaterial } from "../lib/flashcardsOllama";
-import { ocrPdfPagesWithVision } from "../lib/pdfVisionOcr";
+import {
+  ocrPdfPagesWithVision,
+  PDF_PAGE_IMAGE_TEST_VISION_OPTIONS,
+} from "../lib/pdfVisionOcr";
 import { loadLocalProfile } from "../lib/storage";
 import { downloadQuizletTsv } from "../lib/exportCsv";
 import type { ChunkRow, FlashcardRow } from "../lib/db";
 
+/** Strony z mniej tekstu niż ten próg dostają OCR przy generowaniu fiszek (bez limitu liczby stron). */
 const FLASHCARD_OCR_PAGE_TEXT_MIN = 160;
-const FLASHCARD_OCR_MAX_PAGES = 8;
 
 function normalizeSpaces(s: string): string {
   return (s || "").replace(/\s+/g, " ").trim();
@@ -124,22 +127,30 @@ export function Flashcards() {
               chunkMeaningfulLen(c.body) < FLASHCARD_OCR_PAGE_TEXT_MIN,
           )
           .map((c) => c.slide_index ?? 0)
-          .filter((p, i, arr) => p > 0 && arr.indexOf(p) === i)
-          .slice(0, FLASHCARD_OCR_MAX_PAGES);
+          .filter((p, i, arr) => p > 0 && arr.indexOf(p) === i);
         if (pagesToOcr.length > 0) {
           setGenProgress({
-            label: `Analizuję obrazy stron PDF (${pagesToOcr.length})…`,
-            percent: 8,
+            label: `OCR stron PDF (${pagesToOcr.length}) przed fiszkami…`,
+            percent: 6,
           });
           try {
             const ocrByPage = await ocrPdfPagesWithVision(
               filePath,
               model,
               pagesToOcr,
+              {
+                renderOptions: PDF_PAGE_IMAGE_TEST_VISION_OPTIONS,
+                onProgress: (current, total, pageNumber) => {
+                  setGenProgress({
+                    label: `OCR fiszki: strona ${pageNumber} (${current}/${total})…`,
+                    percent: 6 + Math.round((current / Math.max(1, total)) * 12),
+                  });
+                },
+              },
             );
             effectiveChunks = mergeImageOcrIntoChunks(chunks, ocrByPage);
           } catch {
-            // OCR obrazów to fallback — jeśli się nie uda, generujemy z samego tekstu.
+            // OCR opcjonalny — przy błędzie generujemy z samych chunków.
           }
         }
       }

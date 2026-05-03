@@ -33,13 +33,24 @@ export const PDF_PAGE_IMAGE_DEFAULT_OPTIONS = {
 
 /**
  * Mniejszy, skompresowany JPEG + limit rozdzielczości — mniej RAM i mniejszy transfer do Ollamy.
- * Używane m.in. przy „trybie słabszego komputera” przy generowaniu testów (wizja włączona).
+ * Tryb „słabszego komputera” przy generowaniu testów (wizja).
  */
 export const PDF_PAGE_IMAGE_LOW_SPEC_OPTIONS: PdfPageImageOptions = {
   scale: 1.2,
   maxLongEdgePx: 1200,
   mimeType: "image/jpeg",
   jpegQuality: 0.84,
+};
+
+/**
+ * Domyślny podgląd strony przy generowaniu testów z wizją — JPEG i limit dłuższego boku,
+ * żeby paczka do Ollamy była mała, ale tekst na slajdzie nadal czytelny.
+ */
+export const PDF_PAGE_IMAGE_TEST_VISION_OPTIONS: PdfPageImageOptions = {
+  scale: 1.35,
+  maxLongEdgePx: 1400,
+  mimeType: "image/jpeg",
+  jpegQuality: 0.86,
 };
 
 async function renderPageToImageBase64(
@@ -111,6 +122,8 @@ export type ImageCropPercent = {
 type OcrVisionOptions = {
   onProgress?: (current: number, total: number, pageNumber: number) => void;
   perPageTimeoutMs?: number;
+  /** Domyślnie pełny PNG — ustaw np. PDF_PAGE_IMAGE_TEST_VISION_OPTIONS dla mniejszego JPEG. */
+  renderOptions?: PdfPageImageOptions;
 };
 
 function withTimeout<T>(promise: Promise<T>, ms: number, label: string): Promise<T> {
@@ -179,7 +192,11 @@ export async function ocrPdfPagesWithVision(
     const pageNumber = pageNumbers[idx]!;
     if (pageNumber < 1 || pageNumber > doc.numPages) continue;
     options?.onProgress?.(idx + 1, pageNumbers.length, pageNumber);
-    const imageB64 = await renderPageToImageBase64(doc, pageNumber);
+    const imageB64 = await renderPageToImageBase64(
+      doc,
+      pageNumber,
+      options?.renderOptions,
+    );
     const text = await withTimeout(
       ollamaChatWithImages(
         model,
