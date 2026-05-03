@@ -97,6 +97,11 @@ export type OllamaChatOptions = {
   temperature?: number;
   /** Max tokenów odpowiedzi (np. długa tablica fiszek). */
   num_predict?: number;
+  /**
+   * `false` wyłącza tryb „thinking” u modeli Ollamy (np. Gemma 4) — krótsza odpowiedź przy `format: json`.
+   * @see https://docs.ollama.com/capabilities/thinking
+   */
+  think?: boolean;
 };
 
 export type OllamaImageMessage = {
@@ -133,6 +138,7 @@ export async function ollamaChat(
     stream: options?.stream ?? false,
   };
   if (options?.format !== undefined) body.format = options.format;
+  if (options?.think !== undefined) body.think = options.think;
   const ollamaOpts: Record<string, unknown> = {};
   if (options?.temperature !== undefined)
     ollamaOpts.temperature = options.temperature;
@@ -182,6 +188,7 @@ export async function ollamaChatWithImages(
     stream: options?.stream ?? false,
   };
   if (options?.format !== undefined) body.format = options.format;
+  if (options?.think !== undefined) body.think = options.think;
   const ollamaOpts: Record<string, unknown> = {};
   if (options?.temperature !== undefined) {
     ollamaOpts.temperature = options.temperature;
@@ -256,6 +263,7 @@ export async function ollamaChatStream(
     stream: true,
   };
   if (options?.format !== undefined) body.format = options.format;
+  if (options?.think !== undefined) body.think = options.think;
   const ollamaOpts: Record<string, unknown> = {};
   if (options?.temperature !== undefined)
     ollamaOpts.temperature = options.temperature;
@@ -348,6 +356,7 @@ export async function ollamaChatWithImagesStream(
     stream: true,
   };
   if (options?.format !== undefined) body.format = options.format;
+  if (options?.think !== undefined) body.think = options.think;
   const ollamaOpts: Record<string, unknown> = {};
   if (options?.temperature !== undefined) {
     ollamaOpts.temperature = options.temperature;

@@ -29,6 +29,33 @@ pub struct OllamaChatOptionsPayload {
     pub format: Option<serde_json::Value>,
     pub temperature: Option<f64>,
     pub num_predict: Option<i64>,
+    /// `false` wyłącza pole „thinking” u modeli wspierających je w Ollamie (np. Gemma 4) — krótszy czas do JSON.
+    pub think: Option<bool>,
+}
+
+fn apply_ollama_chat_options_to_body(
+    body: &mut serde_json::Value,
+    options: &Option<OllamaChatOptionsPayload>,
+) {
+    let Some(opts) = options else {
+        return;
+    };
+    if let Some(format) = &opts.format {
+        body["format"] = format.clone();
+    }
+    if opts.temperature.is_some() || opts.num_predict.is_some() {
+        let mut o = serde_json::Map::new();
+        if let Some(t) = opts.temperature {
+            o.insert("temperature".to_string(), serde_json::json!(t));
+        }
+        if let Some(n) = opts.num_predict {
+            o.insert("num_predict".to_string(), serde_json::json!(n));
+        }
+        body["options"] = serde_json::Value::Object(o);
+    }
+    if let Some(think) = opts.think {
+        body["think"] = serde_json::json!(think);
+    }
 }
 
 #[derive(Debug, Serialize, Clone)]
@@ -354,21 +381,7 @@ pub async fn ollama_chat_backend(
         "messages": messages,
         "stream": options.as_ref().and_then(|o| o.stream).unwrap_or(false),
     });
-    if let Some(opts) = options {
-        if let Some(format) = opts.format {
-            body["format"] = format;
-        }
-        if opts.temperature.is_some() || opts.num_predict.is_some() {
-            let mut o = serde_json::Map::new();
-            if let Some(t) = opts.temperature {
-                o.insert("temperature".to_string(), serde_json::json!(t));
-            }
-            if let Some(n) = opts.num_predict {
-                o.insert("num_predict".to_string(), serde_json::json!(n));
-            }
-            body["options"] = serde_json::Value::Object(o);
-        }
-    }
+    apply_ollama_chat_options_to_body(&mut body, &options);
 
     let res = client
         .post("http://127.0.0.1:11434/api/chat")
@@ -409,21 +422,7 @@ pub async fn ollama_chat_with_images_backend(
         "messages": messages,
         "stream": options.as_ref().and_then(|o| o.stream).unwrap_or(false),
     });
-    if let Some(opts) = options {
-        if let Some(format) = opts.format {
-            body["format"] = format;
-        }
-        if opts.temperature.is_some() || opts.num_predict.is_some() {
-            let mut o = serde_json::Map::new();
-            if let Some(t) = opts.temperature {
-                o.insert("temperature".to_string(), serde_json::json!(t));
-            }
-            if let Some(n) = opts.num_predict {
-                o.insert("num_predict".to_string(), serde_json::json!(n));
-            }
-            body["options"] = serde_json::Value::Object(o);
-        }
-    }
+    apply_ollama_chat_options_to_body(&mut body, &options);
 
     let res = client
         .post("http://127.0.0.1:11434/api/chat")
@@ -535,21 +534,7 @@ pub async fn ollama_chat_stream_backend(
         "messages": messages,
         "stream": true,
     });
-    if let Some(opts) = options {
-        if let Some(format) = opts.format {
-            body["format"] = format;
-        }
-        if opts.temperature.is_some() || opts.num_predict.is_some() {
-            let mut o = serde_json::Map::new();
-            if let Some(t) = opts.temperature {
-                o.insert("temperature".to_string(), serde_json::json!(t));
-            }
-            if let Some(n) = opts.num_predict {
-                o.insert("num_predict".to_string(), serde_json::json!(n));
-            }
-            body["options"] = serde_json::Value::Object(o);
-        }
-    }
+    apply_ollama_chat_options_to_body(&mut body, &options);
 
     let res = client
         .post("http://127.0.0.1:11434/api/chat")
@@ -584,21 +569,7 @@ pub async fn ollama_chat_with_images_stream_backend(
         "messages": messages,
         "stream": true,
     });
-    if let Some(opts) = options {
-        if let Some(format) = opts.format {
-            body["format"] = format;
-        }
-        if opts.temperature.is_some() || opts.num_predict.is_some() {
-            let mut o = serde_json::Map::new();
-            if let Some(t) = opts.temperature {
-                o.insert("temperature".to_string(), serde_json::json!(t));
-            }
-            if let Some(n) = opts.num_predict {
-                o.insert("num_predict".to_string(), serde_json::json!(n));
-            }
-            body["options"] = serde_json::Value::Object(o);
-        }
-    }
+    apply_ollama_chat_options_to_body(&mut body, &options);
 
     let res = client
         .post("http://127.0.0.1:11434/api/chat")

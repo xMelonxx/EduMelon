@@ -47,7 +47,8 @@ export type TestGenerationOptions = {
   onDevLog?: (line: string) => void;
 };
 
-const TEST_GEN_CALL_TIMEOUT_MS = 90_000;
+/** Modele z „thinking” (np. Gemma 4) potrafią >90 s zanim pojawi się JSON — bufor + `think: false` w żądaniu. */
+const TEST_GEN_CALL_TIMEOUT_MS = 180_000;
 const HEARTBEAT_MS = 3_000;
 /** Bez obrazu opieramy się wyłącznie na tekście z ingestu. */
 const MAX_PAGE_CONTEXT_CHARS_TEXT = 12000;
@@ -288,6 +289,8 @@ async function runOllamaJsonChatForTests(
     format: "json" as const,
     temperature: 0.25,
     num_predict: numPredict,
+    /** Ollama: wyłącza osobne pole thinking — szybciej do treści JSON (DEV stream i zwykły chat). */
+    think: false as const,
   };
 
   if (!options?.onDevLog) {
@@ -460,7 +463,7 @@ export async function generateTestQuestionsFromChunks(
     );
 
     const system =
-      "Jesteś generatorem pytań testowych ABCD po polsku. Zwracasz WYŁĄCZNIE tablicę JSON.";
+      "Jesteś generatorem pytań testowych ABCD po polsku. Zwracasz WYŁĄCZNIE tablicę JSON — bez rozpisywania planu ani kroków rozumowania w odpowiedzi, tylko gotowa tablica.";
 
     const jsonAndRules = `Format JSON:
 [
@@ -689,7 +692,7 @@ ${page.context.slice(0, MAX_PAGE_CONTEXT_CHARS_TEXT).trim()}
   if (deduped.length === 0) {
     const hint =
       pagesWithAnyParsed === 0
-        ? " Żadna strona nie zwróciła poprawnego zestawu pytań — często: timeout (90 s na stronę), Ollama przeciążona, model bez sensownego JSON lub powtarzające się opcje ABCD (walidacja odrzuca pytanie)."
+        ? " Żadna strona nie zwróciła poprawnego zestawu pytań — często: timeout (3 min na stronę), Ollama przeciążona, model bez sensownego JSON lub powtarzające się opcje ABCD (walidacja odrzuca pytanie)."
         : " Wszystkie kandydaty odrzucono przy deduplikacji (powtarzające się treści pytań).";
     const last =
       lastPageFailure != null
