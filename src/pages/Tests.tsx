@@ -12,6 +12,7 @@ import {
   listTestQuestionsForPresentation,
   saveTestAttempt,
   saveTestQuestionBank,
+  saveTestGenerationRun,
   listWrongAnswersForAttempt,
   clearTestDataForPresentation,
   type TestAttemptQuestionReviewRow,
@@ -23,6 +24,7 @@ import {
 import { loadLocalProfile } from "../lib/storage";
 import {
   generateTestQuestionsFromChunks,
+  type TestGenerationMetrics,
   type TestGenProgress,
   type TestGenerationOptions,
 } from "../lib/testsOllama";
@@ -151,7 +153,14 @@ export function Tests() {
   const [devTestPageEnd, setDevTestPageEnd] = useState("");
   const [pdfPageCountDev, setPdfPageCountDev] = useState<number | null>(null);
   const [devTestLogs, setDevTestLogs] = useState<string[]>([]);
+  const [devGenerationMode, setDevGenerationMode] = useState<
+    "smart_chunking" | "legacy_page_mode"
+  >("smart_chunking");
+  const [finalQuestionLimitInput, setFinalQuestionLimitInput] = useState("20");
   const [devLastGeneratedJson, setDevLastGeneratedJson] = useState<string | null>(
+    null,
+  );
+  const [devLastMetrics, setDevLastMetrics] = useState<TestGenerationMetrics | null>(
     null,
   );
   const devLogPreRef = useRef<HTMLPreElement>(null);
@@ -285,6 +294,7 @@ export function Tests() {
     setResult(null);
     if (devToolsEnabled) {
       setDevLastGeneratedJson(null);
+      setDevLastMetrics(null);
       setDevTestLogs([
         `[${new Date().toISOString()}] Strumień Ollamy — linie 💭 to rozumowanie modelu (pole „thinking”; nie każdy model/tagi je zwracają).`,
       ]);
@@ -292,7 +302,15 @@ export function Tests() {
     try {
       const chunks = await listChunksForPresentation(id);
       const model = MODEL_PROFILES[profile.modelProfile].ollamaTag;
-      const genOpts: TestGenerationOptions = { sourceKind, filePath };
+      const genOpts: TestGenerationOptions = {
+        sourceKind,
+        filePath,
+        mode: devGenerationMode,
+      };
+      const finalLimitParsed = parseInt(finalQuestionLimitInput, 10);
+      if (Number.isFinite(finalLimitParsed) && finalLimitParsed > 0) {
+        genOpts.finalQuestionLimit = finalLimitParsed;
+      }
       if (devToolsEnabled && devRestrictTestRange) {
         const start = Math.max(1, parseInt(devTestPageStart, 10) || 1);
         let endNum = parseInt(devTestPageEnd.trim(), 10);
@@ -317,14 +335,42 @@ export function Tests() {
       if (devToolsEnabled) {
         genOpts.onDevLog = appendDevLog;
       }
-      const generated = await generateTestQuestionsFromChunks(
+      const generation = await generateTestQuestionsFromChunks(
         model,
         chunks,
         (p) => setGenProgress(p),
         genOpts,
       );
+      const generated = generation.questions;
+      const metrics = generation.metrics;
+      if (!metrics.minimumSatisfied) {
+        const proceed = window.confirm(
+          `Nie udało się wygenerować pełnej liczby pytań.\n\nUtworzyć test z tego, co jest? (${generated.length} pytań)`,
+        );
+        if (!proceed) {
+          setError("Anulowano zapis niepełnego testu.");
+          if (devToolsEnabled) {
+            appendDevLog(
+              `Użytkownik anulował zapis: minimum ${metrics.targetQuestionLimit}, wygenerowano ${generated.length}.`,
+            );
+          }
+          return;
+        }
+      }
       if (devToolsEnabled) {
         setDevLastGeneratedJson(JSON.stringify(generated, null, 2));
+        setDevLastMetrics(metrics);
+        appendDevLog(
+          `METRYKI: mode=${metrics.generationMode}, paczki=${metrics.chunkCount}, plannedPerChunk=${metrics.plannedPerChunk}, strony=${metrics.pagesTotal}, parsed=${metrics.pagesWithAnyParsed}, pytania preOpt=${metrics.generatedPreOptimizer}, postOpt=${metrics.generatedPostOptimizer}, final=${metrics.questionsAfterDedupe}/${metrics.questionsBeforeDedupe}, quality=${metrics.qualityAverage.toFixed(2)}/6, fallbackMin=${metrics.fallbackUsed ? "tak" : "nie"}`,
+        );
+        if (!metrics.minimumSatisfied) {
+          appendDevLog(
+            `Minimum nieosiągnięte: ${metrics.questionsAfterDedupe}/${metrics.targetQuestionLimit} (max ${metrics.targetQuestionMax})`,
+          );
+        }
+        appendDevLog(
+          `REJECTY: invalid_shape=${metrics.rejectReasons.invalid_shape}, duplicate_options=${metrics.rejectReasons.duplicate_options}, quality_gate=${metrics.rejectReasons.quality_gate}, duplicate_question=${metrics.rejectReasons.duplicate_question}, invalid_json=${metrics.rejectReasons.invalid_json}, timeout=${metrics.rejectReasons.timeout}, other=${metrics.rejectReasons.other_error}`,
+        );
       }
       await saveTestQuestionBank(
         id,
@@ -345,6 +391,7 @@ export function Tests() {
           crop_h: q.crop_h,
         })),
       );
+      await saveTestGenerationRun(id, metrics);
       await load();
     } catch (e) {
       const msg = e instanceof Error ? e.message : String(e);
@@ -615,6 +662,35 @@ export function Tests() {
                   </button>
                 </div>
                 <div className="rounded-lg border border-outline-variant/40 bg-surface-container-low/70 p-3 space-y-3">
+                  <div className="flex flex-wrap items-end gap-4 pl-1">
+                    <label className="flex flex-col gap-1 text-xs text-on-surface-variant">
+                      Tryb generowania
+                      <select
+                        value={devGenerationMode}
+                        disabled={stage === "in_progress"}
+                        onChange={(e) =>
+                          setDevGenerationMode(
+                            e.target.value as "smart_chunking" | "legacy_page_mode",
+                          )
+                        }
+                        className="rounded-lg border border-outline-variant bg-surface-container px-3 py-2 text-on-surface text-sm"
+                      >
+                        <option value="smart_chunking">Smart Chunking (default)</option>
+                        <option value="legacy_page_mode">Legacy (strona po stronie)</option>
+                      </select>
+                    </label>
+                    <label className="flex flex-col gap-1 text-xs text-on-surface-variant">
+                      Ile pytań chcesz wygenerować?
+                      <input
+                        type="number"
+                        min={1}
+                        value={finalQuestionLimitInput}
+                        disabled={stage === "in_progress"}
+                        onChange={(e) => setFinalQuestionLimitInput(e.target.value)}
+                        className="w-24 rounded-lg border border-outline-variant bg-surface-container px-3 py-2 text-on-surface text-sm"
+                      />
+                    </label>
+                  </div>
                   <label className="flex items-start gap-3 text-sm text-on-surface cursor-pointer">
                     <input
                       type="checkbox"
@@ -677,6 +753,22 @@ export function Tests() {
                 <p className="text-on-surface">
                   Ten materiał nie ma jeszcze wygenerowanego testu.
                 </p>
+                <div className="rounded-xl border border-outline-variant/50 bg-surface-container/50 p-4">
+                  <label className="flex flex-col gap-1 text-sm text-on-surface">
+                    Ile pytań chcesz wygenerować?
+                    <input
+                      type="number"
+                      min={1}
+                      value={finalQuestionLimitInput}
+                      disabled={stage === "in_progress"}
+                      onChange={(e) => setFinalQuestionLimitInput(e.target.value)}
+                      className="w-32 rounded-lg border border-outline-variant bg-surface-container px-3 py-2 text-on-surface text-sm"
+                    />
+                  </label>
+                  <p className="text-xs text-on-surface-variant mt-2 mb-0">
+                    Przygotujemy pełny zestaw pytań z całego materiału.
+                  </p>
+                </div>
                 {devToolsEnabled && (
                   <div className="rounded-xl border border-dashed border-outline-variant bg-surface-container/40 p-4 space-y-3">
                     <label className="flex items-start gap-3 text-sm text-on-surface cursor-pointer">
@@ -1140,6 +1232,17 @@ export function Tests() {
                   <p className="text-xs text-on-surface-variant">
                     Ostatni wynik w pamięci: {devLastGeneratedJson.length} znaków JSON
                     (pobierz plik, zanim wygenerujesz test ponownie).
+                  </p>
+                )}
+                {devLastMetrics && (
+                  <p className="text-xs text-on-surface-variant">
+                    Ostatnie metryki: mode {devLastMetrics.generationMode}, paczki{" "}
+                    {devLastMetrics.chunkCount}, quality{" "}
+                    {devLastMetrics.qualityAverage.toFixed(2)}/6, timeouty{" "}
+                    {devLastMetrics.rejectReasons.timeout}, invalid_json{" "}
+                    {devLastMetrics.rejectReasons.invalid_json}, latency{" "}
+                    {Math.round(devLastMetrics.totalLatencyMs / 1000)}s, optimizer{" "}
+                    {devLastMetrics.optimizerApplied ? "on" : "off"} (-{devLastMetrics.optimizerDropCount}).
                   </p>
                 )}
               </section>

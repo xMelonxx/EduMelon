@@ -1,11 +1,11 @@
 {
-  "version": "0.1.11",
-  "notes": "EduMelon 0.1.11\n\n- Generowanie testów: Ollama dostaje think=false — krócej do JSON przy modelach z rozumowaniem (np. Gemma 4), mniej timeoutów przy włączonym logu DEV.\n- Generowanie testów: timeout na stronę wydłużony do 3 min (wcześniej 90 s).\n",
-  "pub_date": "2026-05-03T18:05:41Z",
+  "version": "0.1.12",
+  "notes": "EduMelon 0.1.12\n\n- Testy: nowy tryb Smart Chunking (domyślny), lepsze domykanie docelowej liczby pytań oraz fallback, gdy minimum nie zostało osiągnięte.\n- Testy DEV: metryki generowania i zapis runów do bazy (jakość, latency, rejecty, timeouty), plus możliwość wyboru trybu i limitu pytań.\n- Stabilność: lepsza klasyfikacja błędów transport/connect/timeout w komunikacji z Ollamą.\n",
+  "pub_date": "2026-05-08T18:31:34Z",
   "platforms": {
     "windows-x86_64": {
-      "signature": "dW50cnVzdGVkIGNvbW1lbnQ6IHNpZ25hdHVyZSBmcm9tIHRhdXJpIHNlY3JldCBrZXkKUlVTZEc3c0RCMVVta1VaMXJxR2E0TVNxMDN3dDcxOGh0WjB5ZVcrejdBcFRvdUZ4aUFZckxKZVhmQnhad2NDNnJPbzhJVXRNdnp3NFV3Y2twNkpHMFZjYk1TTUtmZEg1OVFZPQp0cnVzdGVkIGNvbW1lbnQ6IHRpbWVzdGFtcDoxNzc3ODMxNTQxCWZpbGU6RWR1TWVsb25fMC4xLjExX3g2NC1zZXR1cC5leGUKM3o5bCtZYVVaNGZjTG1kbDBheGxNVTJxMFJ5MGh6ajY4SmJOODZab1RQQTlSMkV4N0dmbUw5Q2ZwQlMxRmFDMUQ4TCs4YnlmdWRPTEpzZmJ4RGJORFE9PQo=",
-      "url": "https://github.com/xMelonxx/EduMelon/releases/download/v0.1.11/EduMelon_0.1.11_x64-setup.exe"
+      "signature": "dW50cnVzdGVkIGNvbW1lbnQ6IHNpZ25hdHVyZSBmcm9tIHRhdXJpIHNlY3JldCBrZXkKUlVTZEc3c0RCMVVta2ZIMWljenFRVXNjMWYybGZhK3ZWUiswdnZsMnVMZG9yK21KRTRuSDZ2R21PbmMwSTJPWU4rbWNNbFYvRU5xT1hPT0IwdE9xU3k2RTFQbjJDaXhod1FzPQp0cnVzdGVkIGNvbW1lbnQ6IHRpbWVzdGFtcDoxNzc4MjY1MDMyCWZpbGU6RWR1TWVsb25fMC4xLjEyX3g2NC1zZXR1cC5leGUKT3lPMDkrYW5sRC9kV1IrOUVETnBYRmxDSkVGWk5VL1dRNC9IQ1hEODlucXhLcDZPRmw0ZE5HajRKYjdFV09xc1JPSkZIZ0hvTGxscUUyVkRZZndMQkE9PQo=",
+      "url": "https://github.com/xMelonxx/EduMelon/releases/download/v0.1.12/EduMelon_0.1.12_x64-setup.exe"
     }
   }
 }

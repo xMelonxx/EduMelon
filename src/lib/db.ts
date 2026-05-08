@@ -1,4 +1,5 @@
 import Database from "@tauri-apps/plugin-sql";
+import type { TestGenerationMetrics } from "./testsOllama";
 
 let dbPromise: Promise<Database> | null = null;
 
@@ -142,6 +143,95 @@ async function migrate(db: Database): Promise<void> {
       FOREIGN KEY (question_id) REFERENCES test_questions(id) ON DELETE CASCADE
     );
   `);
+  await db.execute(`
+    CREATE TABLE IF NOT EXISTS test_generation_runs (
+      id TEXT PRIMARY KEY,
+      presentation_id TEXT NOT NULL,
+      model TEXT NOT NULL,
+      generation_mode TEXT NOT NULL DEFAULT 'smart_chunking',
+      chunk_count INTEGER NOT NULL DEFAULT 0,
+      page_ranges_json TEXT NOT NULL DEFAULT '[]',
+      target_question_limit INTEGER NOT NULL DEFAULT 20,
+      target_question_max INTEGER NOT NULL DEFAULT 22,
+      planned_per_chunk INTEGER NOT NULL DEFAULT 0,
+      generated_pre_optimizer INTEGER NOT NULL DEFAULT 0,
+      generated_post_optimizer INTEGER NOT NULL DEFAULT 0,
+      fallback_used INTEGER NOT NULL DEFAULT 0,
+      optimizer_applied INTEGER NOT NULL DEFAULT 0,
+      optimizer_drop_count INTEGER NOT NULL DEFAULT 0,
+      is_low_spec INTEGER NOT NULL DEFAULT 0,
+      pages_total INTEGER NOT NULL DEFAULT 0,
+      pages_with_any_parsed INTEGER NOT NULL DEFAULT 0,
+      questions_before_dedupe INTEGER NOT NULL DEFAULT 0,
+      questions_after_dedupe INTEGER NOT NULL DEFAULT 0,
+      quality_average REAL NOT NULL DEFAULT 0,
+      text_calls INTEGER NOT NULL DEFAULT 0,
+      vision_calls INTEGER NOT NULL DEFAULT 0,
+      total_latency_ms INTEGER NOT NULL DEFAULT 0,
+      reject_reasons_json TEXT NOT NULL,
+      created_at TEXT NOT NULL,
+      FOREIGN KEY (presentation_id) REFERENCES presentations(id) ON DELETE CASCADE
+    );
+  `);
+  if (!(await tableHasColumn(db, "test_generation_runs", "generation_mode"))) {
+    await db.execute(
+      `ALTER TABLE test_generation_runs ADD COLUMN generation_mode TEXT NOT NULL DEFAULT 'smart_chunking'`,
+    );
+  }
+  if (!(await tableHasColumn(db, "test_generation_runs", "chunk_count"))) {
+    await db.execute(
+      `ALTER TABLE test_generation_runs ADD COLUMN chunk_count INTEGER NOT NULL DEFAULT 0`,
+    );
+  }
+  if (!(await tableHasColumn(db, "test_generation_runs", "page_ranges_json"))) {
+    await db.execute(
+      `ALTER TABLE test_generation_runs ADD COLUMN page_ranges_json TEXT NOT NULL DEFAULT '[]'`,
+    );
+  }
+  if (!(await tableHasColumn(db, "test_generation_runs", "target_question_limit"))) {
+    await db.execute(
+      `ALTER TABLE test_generation_runs ADD COLUMN target_question_limit INTEGER NOT NULL DEFAULT 20`,
+    );
+  }
+  if (!(await tableHasColumn(db, "test_generation_runs", "target_question_max"))) {
+    await db.execute(
+      `ALTER TABLE test_generation_runs ADD COLUMN target_question_max INTEGER NOT NULL DEFAULT 22`,
+    );
+  }
+  if (!(await tableHasColumn(db, "test_generation_runs", "planned_per_chunk"))) {
+    await db.execute(
+      `ALTER TABLE test_generation_runs ADD COLUMN planned_per_chunk INTEGER NOT NULL DEFAULT 0`,
+    );
+  }
+  if (!(await tableHasColumn(db, "test_generation_runs", "generated_pre_optimizer"))) {
+    await db.execute(
+      `ALTER TABLE test_generation_runs ADD COLUMN generated_pre_optimizer INTEGER NOT NULL DEFAULT 0`,
+    );
+  }
+  if (!(await tableHasColumn(db, "test_generation_runs", "generated_post_optimizer"))) {
+    await db.execute(
+      `ALTER TABLE test_generation_runs ADD COLUMN generated_post_optimizer INTEGER NOT NULL DEFAULT 0`,
+    );
+  }
+  if (!(await tableHasColumn(db, "test_generation_runs", "fallback_used"))) {
+    await db.execute(
+      `ALTER TABLE test_generation_runs ADD COLUMN fallback_used INTEGER NOT NULL DEFAULT 0`,
+    );
+  }
+  if (!(await tableHasColumn(db, "test_generation_runs", "optimizer_applied"))) {
+    await db.execute(
+      `ALTER TABLE test_generation_runs ADD COLUMN optimizer_applied INTEGER NOT NULL DEFAULT 0`,
+    );
+  }
+  if (!(await tableHasColumn(db, "test_generation_runs", "optimizer_drop_count"))) {
+    await db.execute(
+      `ALTER TABLE test_generation_runs ADD COLUMN optimizer_drop_count INTEGER NOT NULL DEFAULT 0`,
+    );
+  }
+  await db.execute(
+    `CREATE INDEX IF NOT EXISTS idx_test_generation_runs_presentation_created
+     ON test_generation_runs(presentation_id, created_at DESC)`,
+  );
   await db.execute(`
     CREATE TABLE IF NOT EXISTS study_events (
       id TEXT PRIMARY KEY,
@@ -584,6 +674,112 @@ export async function saveTestQuestionBank(
        question_count = excluded.question_count`,
     [presentationId, generatedAt, questions.length],
   );
+}
+
+export type TestGenerationRunRow = {
+  id: string;
+  presentation_id: string;
+  model: string;
+  generation_mode: string;
+  chunk_count: number;
+  page_ranges_json: string;
+  target_question_limit: number;
+  target_question_max: number;
+  planned_per_chunk: number;
+  generated_pre_optimizer: number;
+  generated_post_optimizer: number;
+  fallback_used: number;
+  optimizer_applied: number;
+  optimizer_drop_count: number;
+  is_low_spec: number;
+  pages_total: number;
+  pages_with_any_parsed: number;
+  questions_before_dedupe: number;
+  questions_after_dedupe: number;
+  quality_average: number;
+  text_calls: number;
+  vision_calls: number;
+  total_latency_ms: number;
+  reject_reasons_json: string;
+  created_at: string;
+};
+
+export async function saveTestGenerationRun(
+  presentationId: string,
+  metrics: TestGenerationMetrics,
+): Promise<void> {
+  const db = await getDb();
+  await db.execute(
+    `INSERT INTO test_generation_runs
+     (id, presentation_id, model, generation_mode, chunk_count, page_ranges_json, target_question_limit,
+      target_question_max, planned_per_chunk, generated_pre_optimizer, generated_post_optimizer, fallback_used,
+      optimizer_applied, optimizer_drop_count, is_low_spec, pages_total, pages_with_any_parsed,
+      questions_before_dedupe, questions_after_dedupe, quality_average, text_calls,
+      vision_calls, total_latency_ms, reject_reasons_json, created_at)
+     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24, $25)`,
+    [
+      crypto.randomUUID(),
+      presentationId,
+      metrics.model,
+      metrics.generationMode,
+      metrics.chunkCount,
+      JSON.stringify(metrics.pageRanges),
+      metrics.targetQuestionLimit,
+      metrics.targetQuestionMax,
+      metrics.plannedPerChunk,
+      metrics.generatedPreOptimizer,
+      metrics.generatedPostOptimizer,
+      metrics.fallbackUsed ? 1 : 0,
+      metrics.optimizerApplied ? 1 : 0,
+      metrics.optimizerDropCount,
+      metrics.isLowSpec ? 1 : 0,
+      metrics.pagesTotal,
+      metrics.pagesWithAnyParsed,
+      metrics.questionsBeforeDedupe,
+      metrics.questionsAfterDedupe,
+      metrics.qualityAverage,
+      metrics.textCalls,
+      metrics.visionCalls,
+      metrics.totalLatencyMs,
+      JSON.stringify(metrics.rejectReasons),
+      new Date().toISOString(),
+    ],
+  );
+}
+
+export type TestGenerationAggregateRow = {
+  runs: number;
+  avg_quality: number;
+  avg_latency_ms: number;
+  avg_questions_after_dedupe: number;
+  timeout_rejects: number;
+  invalid_json_rejects: number;
+};
+
+export async function getTestGenerationAggregateForPresentation(
+  presentationId: string,
+  limit = 20,
+): Promise<TestGenerationAggregateRow | null> {
+  const db = await getDb();
+  const rows = await db.select<TestGenerationAggregateRow[]>(
+    `WITH latest AS (
+       SELECT quality_average, total_latency_ms, questions_after_dedupe, reject_reasons_json
+       FROM test_generation_runs
+       WHERE presentation_id = $1
+       ORDER BY created_at DESC
+       LIMIT $2
+     )
+     SELECT
+       COUNT(*) AS runs,
+       AVG(quality_average) AS avg_quality,
+       AVG(total_latency_ms) AS avg_latency_ms,
+       AVG(questions_after_dedupe) AS avg_questions_after_dedupe,
+       SUM(CAST(json_extract(reject_reasons_json, '$.timeout') AS INTEGER)) AS timeout_rejects,
+       SUM(CAST(json_extract(reject_reasons_json, '$.invalid_json') AS INTEGER)) AS invalid_json_rejects
+     FROM latest`,
+    [presentationId, limit],
+  );
+  return rows[0] ?? null;
 }
 
 /** Kasuje pytania testowe, metadane `tests` oraz historię podejść dla prezentacji (DEV / ponowna generacja). */

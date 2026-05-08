@@ -39,6 +39,8 @@ export type GeneratedTestQuestion = {
 export type TestGenerationOptions = {
   sourceKind?: string;
   filePath?: string | null;
+  mode?: "smart_chunking" | "legacy_page_mode";
+  finalQuestionLimit?: number;
   /**
    * DEV: włącznie numery stron (PDF) lub slajdów — kolejność start/end nie ma znaczenia (normalizujemy do min–max).
    */
@@ -47,29 +49,96 @@ export type TestGenerationOptions = {
   onDevLog?: (line: string) => void;
 };
 
-/** Modele z „thinking” (np. Gemma 4) potrafią >90 s zanim pojawi się JSON — bufor + `think: false` w żądaniu. */
-const TEST_GEN_CALL_TIMEOUT_MS = 180_000;
+export type TestGenerationRejectReasons = {
+  invalid_shape: number;
+  duplicate_options: number;
+  quality_gate: number;
+  duplicate_question: number;
+  invalid_json: number;
+  timeout: number;
+  other_error: number;
+};
+
+export type TestGenerationMetrics = {
+  model: string;
+  isLowSpec: boolean;
+  generationMode: "smart_chunking" | "legacy_page_mode";
+  chunkCount: number;
+  pageRanges: string[];
+  targetQuestionLimit: number;
+  targetQuestionMax: number;
+  minimumSatisfied: boolean;
+  plannedPerChunk: number;
+  generatedPreOptimizer: number;
+  generatedPostOptimizer: number;
+  fallbackUsed: boolean;
+  optimizerApplied: boolean;
+  optimizerDropCount: number;
+  pagesTotal: number;
+  pagesWithAnyParsed: number;
+  questionsBeforeDedupe: number;
+  questionsAfterDedupe: number;
+  qualityAverage: number;
+  textCalls: number;
+  visionCalls: number;
+  totalLatencyMs: number;
+  rejectReasons: TestGenerationRejectReasons;
+};
+
+export type TestGenerationResult = {
+  questions: GeneratedTestQuestion[];
+  metrics: TestGenerationMetrics;
+};
+
 const HEARTBEAT_MS = 3_000;
 /** Bez obrazu opieramy się wyłącznie na tekście z ingestu. */
 const MAX_PAGE_CONTEXT_CHARS_TEXT = 12000;
+const MIN_CHUNK_SIZE = 3500;
+const MAX_PAGES = 6;
+const VISION_TEXT_THRESHOLD = 200;
+const MAX_VISION_PAGES_PER_CHUNK = 2;
+const DEFAULT_FINAL_QUESTION_LIMIT = 20;
+const QUALITY_GATE_MIN_SCORE = 5;
+const NEGATIVE_QUESTION_RATIO_MIN = 0.15;
+const NEGATIVE_QUESTION_RATIO_MAX = 0.3;
+const SINGLE_QUESTION_RETRY_MAX = 2;
+type QuestionArchetype =
+  | "mechanizm_przyczynowo_skutkowy"
+  | "różnicowanie_pośrednie"
+  | "interpretacja_danych"
+  | "weryfikacja_fałszu";
+const QUESTION_ARCHETYPES: QuestionArchetype[] = [
+  "mechanizm_przyczynowo_skutkowy",
+  "różnicowanie_pośrednie",
+  "interpretacja_danych",
+  "weryfikacja_fałszu",
+];
 
-/**
- * Heurystyka: kiedy wysłać obraz strony do modelu zamiast samego tekstu z PDF.
- * - bardzo mało tekstu (skan, zły extract),
- * - relatywnie mało słów przy umiarkowanej długości → często slajd z tabelą/diagramem jako grafika.
- */
-function pageNeedsVisionForTest(pageContext: string): boolean {
-  const t = normalizeText(pageContext);
-  if (t.length === 0) return true;
-  if (t.length < 380) return true;
-  const words = t.split(/\s+/).filter(Boolean).length;
-  return t.length < 820 && words < 44;
-}
+type SourcePage = {
+  slide_index: number;
+  context: string;
+};
+
+type SmartChunk = {
+  id: string;
+  startPage: number;
+  endPage: number;
+  representativePage: number;
+  pageRange: string;
+  context: string;
+  sourcePages: SourcePage[];
+  visionNotes: string[];
+};
 
 type TestPerfProfile = {
   attempts: number;
   numPredict: number;
   allowVision: boolean;
+};
+
+type AttemptRuntimeProfile = {
+  numPredict: number;
+  timeoutMs: number;
 };
 
 function normalizeText(s: string): string {
@@ -161,17 +230,28 @@ function coerceToQuestionRecords(root: unknown): Record<string, unknown>[] | nul
   return null;
 }
 
-function countForPage(): number {
-  return 2;
-}
-
 function parseQuestions(
   raw: string,
   page: number | null,
-): GeneratedTestQuestion[] {
-  const records = coerceToQuestionRecords(parseJsonRoot(raw));
-  if (!records || records.length === 0) return [];
+): {
+  questions: GeneratedTestQuestion[];
+  rejects: Pick<TestGenerationRejectReasons, "invalid_shape" | "duplicate_options" | "invalid_json">;
+} {
+  const parsedRoot = parseJsonRoot(raw);
+  const records = coerceToQuestionRecords(parsedRoot);
+  if (!records || records.length === 0) {
+    return {
+      questions: [],
+      rejects: {
+        invalid_shape: 1,
+        duplicate_options: 0,
+        invalid_json: parsedRoot == null ? 1 : 0,
+      },
+    };
+  }
   const out: GeneratedTestQuestion[] = [];
+  let invalidShape = 0;
+  let duplicateOptions = 0;
   for (const item of records) {
     const r = item;
     const question = normalizeText(String(r.question ?? ""));
@@ -219,6 +299,8 @@ function parseQuestions(
       !correct ||
       unique.size < 4
     ) {
+      if (unique.size < 4) duplicateOptions += 1;
+      else invalidShape += 1;
       continue;
     }
     // Model często ustawia requires_image=false mimo kadru (np. cała strona 0,0,100,100) — wtedy i tak pokazujemy wycinek.
@@ -241,21 +323,146 @@ function parseQuestions(
       crop_h: validCrop ? cropH : null,
     });
   }
-  return out;
+  return {
+    questions: out,
+    rejects: {
+      invalid_shape: invalidShape,
+      duplicate_options: duplicateOptions,
+      invalid_json: 0,
+    },
+  };
 }
 
 function dedupeQuestions(
   questions: GeneratedTestQuestion[],
-): GeneratedTestQuestion[] {
+): { deduped: GeneratedTestQuestion[]; removed: number } {
   const seen = new Set<string>();
   const out: GeneratedTestQuestion[] = [];
+  let removed = 0;
   for (const q of questions) {
     const key = normalizeText(q.question).toLowerCase();
-    if (!key || seen.has(key)) continue;
+    if (!key || seen.has(key)) {
+      removed += 1;
+      continue;
+    }
     seen.add(key);
     out.push(q);
   }
-  return out;
+  return { deduped: out, removed };
+}
+
+function buildEmptyRejectReasons(): TestGenerationRejectReasons {
+  return {
+    invalid_shape: 0,
+    duplicate_options: 0,
+    quality_gate: 0,
+    duplicate_question: 0,
+    invalid_json: 0,
+    timeout: 0,
+    other_error: 0,
+  };
+}
+
+function isNegativeQuestionStem(question: string): boolean {
+  const t = normalizeText(question).toLowerCase();
+  return /\b(nie|fałszywe|nieprawidłowe|nie jest|nieprawda)\b/.test(t);
+}
+
+function scoreQuestionQuality(
+  q: GeneratedTestQuestion,
+  context: string,
+): { score: number; failed: string[] } {
+  const failed: string[] = [];
+  let score = 0;
+
+  // 1) unique_answer - zawsze true po parse/validation, ale zostawiamy jawny punkt rubryki.
+  score += 1;
+
+  // 2) distractor_plausibility
+  const options = [q.option_a, q.option_b, q.option_c, q.option_d].map((x) => normalizeText(x));
+  const avgLen = options.reduce((acc, x) => acc + x.length, 0) / 4;
+  const hasTooShort = options.some((x) => x.length < 6);
+  const hasHugeLengthSkew = options.some((x) => x.length > avgLen * 2.4);
+  if (!hasTooShort && !hasHugeLengthSkew) score += 1;
+  else failed.push("distractor_plausibility");
+
+  // 3) source_alignment
+  const ctx = normalizeText(context).toLowerCase();
+  const qTokens = normalizeText(q.question)
+    .toLowerCase()
+    .split(/\s+/)
+    .filter((t) => t.length >= 5);
+  const aligned = qTokens.some((t) => ctx.includes(t));
+  if (aligned || q.requires_image === 1) score += 1;
+  else failed.push("source_alignment");
+
+  // 4) non_triviality
+  const nonTrivial =
+    q.question.length >= 48 &&
+    !/\b(co to jest|zdefiniuj|jak nazywa się)\b/i.test(q.question);
+  if (nonTrivial) score += 1;
+  else failed.push("non_triviality");
+
+  // 5) no_surface_cues
+  const correctIdx = q.correct_option === "A" ? 0 : q.correct_option === "B" ? 1 : q.correct_option === "C" ? 2 : 3;
+  const correctLen = options[correctIdx]?.length ?? 0;
+  const maxLen = Math.max(...options.map((x) => x.length));
+  const hasSurfaceCue = correctLen === maxLen && options.filter((x) => x.length === maxLen).length === 1;
+  if (!hasSurfaceCue) score += 1;
+  else failed.push("no_surface_cues");
+
+  // 6) explanation_quality
+  const explanationQuality = q.explanation.length >= 45;
+  if (explanationQuality) score += 1;
+  else failed.push("explanation_quality");
+
+  return { score, failed };
+}
+
+function classifyGenerationError(
+  error: unknown,
+): "timeout" | "invalid_json" | "other_error" {
+  const msg = error instanceof Error ? error.message : String(error);
+  const lower = msg.toLowerCase();
+  if (lower.includes("timeout")) return "timeout";
+  if (lower.includes("json")) return "invalid_json";
+  return "other_error";
+}
+
+function getAttemptRuntimeProfile(
+  perf: TestPerfProfile,
+  attemptIndex: number,
+): AttemptRuntimeProfile {
+  if (!getLowSpecTestModeEnabled()) {
+    return { numPredict: 4096, timeoutMs: 300_000 };
+  }
+  if (attemptIndex === 0) {
+    return { numPredict: Math.max(perf.numPredict, 3200), timeoutMs: 300_000 };
+  }
+  return { numPredict: 4096, timeoutMs: 300_000 };
+}
+
+function computeQuestionTargetRange(minRequested: number): {
+  min: number;
+  max: number;
+} {
+  const min = Math.max(1, Math.floor(minRequested));
+  const extra = Math.max(1, Math.ceil(min * 0.1));
+  return { min, max: min + extra };
+}
+
+function computePlannedPerChunk(
+  minRequested: number,
+  chunkCount: number,
+  isLowSpec: boolean,
+): number {
+  if (chunkCount <= 0) return 3;
+  const raw = Math.ceil(minRequested / chunkCount);
+  // Ważne: nie ograniczamy już górnego pułapu stałym capem,
+  // bo mogło to uniemożliwić osiągnięcie minimum N (np. 40 pytań).
+  // LowSpec nadal ma ochronę przez timeout/retry i quality gate.
+  const minFloor = isLowSpec ? 2 : 3;
+  return Math.max(minFloor, raw);
 }
 
 async function withTimeout<T>(
@@ -287,7 +494,7 @@ async function runOllamaJsonChatForTests(
 ): Promise<string> {
   const opts = {
     format: "json" as const,
-    temperature: 0.25,
+    temperature: 0.3,
     num_predict: numPredict,
     /** Ollama: wyłącza osobne pole thinking — szybciej do treści JSON (DEV stream i zwykły chat). */
     think: false as const,
@@ -355,16 +562,11 @@ function getTestPerfProfile(): TestPerfProfile {
   };
 }
 
-export async function generateTestQuestionsFromChunks(
-  model: string,
+function buildSourcePagesFromChunks(
   chunks: ChunkRow[],
-  onProgress?: (p: TestGenProgress) => void,
-  options?: TestGenerationOptions,
-): Promise<GeneratedTestQuestion[]> {
-  const devLog = (msg: string) => {
-    options?.onDevLog?.(msg);
-  };
-  const perf = getTestPerfProfile();
+  sourceKind: string | undefined,
+  filePath: string | null | undefined,
+): Promise<SourcePage[]> | SourcePage[] {
   const grouped = new Map<number, string[]>();
   for (const c of chunks) {
     const page = c.slide_index ?? 1;
@@ -373,97 +575,350 @@ export async function generateTestQuestionsFromChunks(
     if (!grouped.has(page)) grouped.set(page, []);
     grouped.get(page)!.push(body);
   }
-
-  const isPdfWithFile =
-    options?.sourceKind?.toLowerCase() === "pdf" && !!options.filePath;
-
-  let pages: { slide_index: number; context: string }[];
-
-  if (isPdfWithFile && options.filePath) {
-    const numPages = await pdfGetPageCount(options.filePath);
-    if (numPages < 1) {
-      throw new Error("PDF nie zawiera żadnej strony.");
-    }
-    pages = [];
-    for (let p = 1; p <= numPages; p++) {
-      const bodies = grouped.get(p);
-      const context = bodies?.length
-        ? normalizeText(bodies.join("\n\n"))
-        : "";
-      pages.push({ slide_index: p, context });
-    }
-  } else {
-    pages = [...grouped.entries()]
-      .map(([slide_index, bodies]) => ({
-        slide_index,
-        context: normalizeText(bodies.join("\n\n")),
-      }))
-      .filter((p) => p.context.length > 60)
-      .sort((a, b) => a.slide_index - b.slide_index);
+  const isPdfWithFile = sourceKind?.toLowerCase() === "pdf" && !!filePath;
+  if (isPdfWithFile && filePath) {
+    return pdfGetPageCount(filePath).then((numPages) => {
+      const out: SourcePage[] = [];
+      for (let p = 1; p <= numPages; p++) {
+        const bodies = grouped.get(p);
+        const context = bodies?.length ? normalizeText(bodies.join("\n\n")) : "";
+        out.push({ slide_index: p, context });
+      }
+      return out;
+    });
   }
+  return [...grouped.entries()]
+    .map(([slide_index, bodies]) => ({
+      slide_index,
+      context: normalizeText(bodies.join("\n\n")),
+    }))
+    .filter((p) => p.context.length > 60)
+    .sort((a, b) => a.slide_index - b.slide_index);
+}
 
-  if (options?.devPageRange) {
-    const { start: a, end: b } = options.devPageRange;
-    const lo = Math.min(a, b);
-    const hi = Math.max(a, b);
-    pages = pages.filter(
-      (p) => p.slide_index >= lo && p.slide_index <= hi,
-    );
-    devLog(
-      `Zakres DEV: strony/slajdy ${lo}–${hi} → ${pages.length} stron po filtrze`,
-    );
-    if (pages.length === 0) {
-      throw new Error(
-        `Zakres DEV (strony/slajdy ${lo}–${hi}) nie obejmuje żadnej strony z materiału (albo wszystkie odrzucono przez filtr treści).`,
+function applyDevRange(
+  pages: SourcePage[],
+  range: { start: number; end: number } | undefined,
+): SourcePage[] {
+  if (!range) return pages;
+  const lo = Math.min(range.start, range.end);
+  const hi = Math.max(range.start, range.end);
+  return pages.filter((p) => p.slide_index >= lo && p.slide_index <= hi);
+}
+
+function buildSmartChunks(pages: SourcePage[]): SmartChunk[] {
+  const chunks: SmartChunk[] = [];
+  let cursor = 0;
+  while (cursor < pages.length) {
+    const buffer: SourcePage[] = [];
+    let chars = 0;
+    while (cursor < pages.length && buffer.length < MAX_PAGES) {
+      const p = pages[cursor]!;
+      buffer.push(p);
+      chars += p.context.length;
+      cursor += 1;
+      if (chars >= MIN_CHUNK_SIZE && buffer.length >= 3) break;
+    }
+    if (buffer.length === 0) break;
+    const startPage = buffer[0]!.slide_index;
+    const endPage = buffer[buffer.length - 1]!.slide_index;
+    const representativePage = buffer[Math.floor(buffer.length / 2)]!.slide_index;
+    const pageRange = startPage === endPage ? `${startPage}` : `${startPage}-${endPage}`;
+    chunks.push({
+      id: `chunk-${chunks.length + 1}`,
+      startPage,
+      endPage,
+      representativePage,
+      pageRange,
+      context: buffer.map((p) => p.context).filter(Boolean).join("\n\n"),
+      sourcePages: buffer,
+      visionNotes: [],
+    });
+  }
+  return chunks;
+}
+
+async function enrichChunkWithVisionNotes(
+  chunk: SmartChunk,
+  model: string,
+  options: TestGenerationOptions | undefined,
+  perf: TestPerfProfile,
+): Promise<{ chunk: SmartChunk; visionCalls: number }> {
+  if (options?.sourceKind?.toLowerCase() !== "pdf" || !options.filePath) {
+    return { chunk, visionCalls: 0 };
+  }
+  const visionCandidates = chunk.sourcePages
+    .filter((p) => normalizeText(p.context).length < VISION_TEXT_THRESHOLD)
+    .slice(0, MAX_VISION_PAGES_PER_CHUNK);
+  if (visionCandidates.length === 0) return { chunk, visionCalls: 0 };
+  const notes: string[] = [];
+  let calls = 0;
+  for (const p of visionCandidates) {
+    try {
+      const image = await pdfPageToImageBase64(
+        options.filePath,
+        p.slide_index,
+        getLowSpecTestModeEnabled()
+          ? PDF_PAGE_IMAGE_LOW_SPEC_OPTIONS
+          : PDF_PAGE_IMAGE_TEST_VISION_OPTIONS,
       );
+      const summary = await runOllamaJsonChatForTests(
+        model,
+        options,
+        Math.max(1024, perf.numPredict),
+        120_000,
+        `Vision opis slajdu ${p.slide_index}`,
+        [
+          {
+            role: "system",
+            content:
+              "Jesteś asystentem analizy slajdów. Zwróć krótką listę kluczowych informacji z obrazu (tabela, schemat, wykres).",
+          },
+          {
+            role: "user",
+            content:
+              "Opisz tylko to, co istotne do tworzenia pytań testowych. Bez markdown, zwięźle.",
+            images: [image],
+          },
+        ],
+        [],
+      );
+      calls += 1;
+      notes.push(`Slajd ${p.slide_index}: ${normalizeText(summary).slice(0, 900)}`);
+    } catch {
+      // Vision note is best-effort.
     }
   }
+  if (notes.length === 0) return { chunk, visionCalls: calls };
+  return {
+    visionCalls: calls,
+    chunk: {
+      ...chunk,
+      visionNotes: notes,
+      context: `${chunk.context}\n\nVISION_NOTES:\n${notes.map((n) => `- ${n}`).join("\n")}`,
+    },
+  };
+}
 
-  if (pages.length === 0) {
+async function optimizeQuizSet(
+  model: string,
+  options: TestGenerationOptions | undefined,
+  questions: GeneratedTestQuestion[],
+  minCount: number,
+  maxCount: number,
+): Promise<GeneratedTestQuestion[]> {
+  if (questions.length <= maxCount) return questions;
+  const list = questions
+    .map(
+      (q, idx) =>
+        `${idx + 1}. [slide=${q.slide_index ?? "?"}] ${q.question}\nA) ${q.option_a}\nB) ${q.option_b}\nC) ${q.option_c}\nD) ${q.option_d}\ncorrect=${q.correct_option}\nexplanation=${q.explanation}`,
+    )
+    .join("\n\n");
+  const raw = await runOllamaJsonChatForTests(
+    model,
+    options,
+    4096,
+    180_000,
+    "Quiz Optimizer",
+    null,
+    [
+      {
+        role: "system",
+        content:
+          "Jesteś optymalizatorem zestawu pytań. Zwracasz wyłącznie tablicę JSON pytań w tym samym schemacie co wejście.",
+      },
+      {
+        role: "user",
+        content: `Oto zestaw pytań. Usuń duplikaty i wybierz od ${minCount} do ${maxCount} najbardziej wartościowych merytorycznie pytań. Zadbaj o równomierne pokrycie materiału.\n\n${list}`,
+      },
+    ],
+  );
+  const parsed = parseQuestions(raw, null).questions;
+  if (parsed.length === 0) return questions.slice(0, maxCount);
+  return parsed.slice(0, maxCount);
+}
+
+async function generateChunkFocusedTopUpQuestions(
+  model: string,
+  options: TestGenerationOptions | undefined,
+  chunks: SmartChunk[],
+  existingQuestions: GeneratedTestQuestion[],
+  need: number,
+): Promise<GeneratedTestQuestion[]> {
+  if (need <= 0 || chunks.length === 0) return [];
+  // Dogrywka oparta o konkretną paczkę zwykle daje stabilniejszy JSON
+  // i mniej halucynacji niż globalny prompt przez cały dokument.
+  const MAX_CONTEXT_CHARS = 14_000;
+  const out: GeneratedTestQuestion[] = [];
+  const seen = new Set(
+    existingQuestions.map((q) => normalizeText(q.question).toLowerCase()),
+  );
+  for (let attempt = 0; attempt < 10 && out.length < need; attempt++) {
+    const remaining = need - out.length;
+    const batchSize = Math.min(3, remaining);
+    const chunk = chunks[attempt % chunks.length]!;
+    const chunkContext = normalizeText(chunk.context).slice(0, MAX_CONTEXT_CHARS);
+    const forbidden = [
+      ...existingQuestions.map((q) => q.question),
+      ...out.map((q) => q.question),
+    ]
+      .map((q, i) => `${i + 1}. ${q}`)
+      .join("\n");
+    const user = `Wygeneruj DOKŁADNIE ${batchSize} NOWYCH pytań ABCD w JSON na podstawie całego materiału.
+
+Format JSON:
+[
+  {
+    "question":"...",
+    "option_a":"...",
+    "option_b":"...",
+    "option_c":"...",
+    "option_d":"...",
+    "correct_option":"A|B|C|D",
+    "explanation":"krótkie uzasadnienie",
+    "requires_image": true|false,
+    "crop_x": 0-100,
+    "crop_y": 0-100,
+    "crop_w": 0-100,
+    "crop_h": 0-100
+  }
+]
+
+Zasady:
+- nie powtarzaj żadnego pytania z listy zakazanej,
+- każda odpowiedź A/B/C/D musi być inna,
+- pytania mają wymagać rozumienia i łączenia faktów z paczki.
+
+Pytania zakazane (nie powtarzaj):
+${forbidden || "(brak)"}
+
+KONTEKST PACZKI (${chunk.pageRange}):
+---
+${chunkContext}
+---`;
+    const raw = await runOllamaJsonChatForTests(
+      model,
+      options,
+      4096,
+      300_000,
+      "Global top-up pytań",
+      null,
+      [
+        {
+          role: "system",
+          content:
+            "Jesteś akademickim twórcą pytań egzaminacyjnych. Zwracasz WYŁĄCZNIE tablicę JSON pytań ABCD.",
+        },
+        { role: "user", content: user },
+      ],
+    );
+    const parsed = parseQuestions(raw, null).questions;
+    for (const q of parsed) {
+      if (out.length >= need) break;
+      const key = normalizeText(q.question).toLowerCase();
+      if (!key || seen.has(key)) continue;
+      seen.add(key);
+      out.push(q);
+    }
+    options?.onDevLog?.(
+      `Chunk top-up batch ${attempt + 1}/10: raw=${parsed.length}, accepted=${out.length}/${need}, chunk=${chunk.pageRange}`,
+    );
+  }
+  return out;
+}
+
+export async function generateTestQuestionsFromChunks(
+  model: string,
+  chunks: ChunkRow[],
+  onProgress?: (p: TestGenProgress) => void,
+  options?: TestGenerationOptions,
+): Promise<TestGenerationResult> {
+  const devLog = (msg: string) => {
+    options?.onDevLog?.(msg);
+  };
+  const perf = getTestPerfProfile();
+  const sourcePagesRaw = await buildSourcePagesFromChunks(
+    chunks,
+    options?.sourceKind,
+    options?.filePath,
+  );
+  const sourcePages = applyDevRange(sourcePagesRaw, options?.devPageRange);
+  if (options?.devPageRange) {
+    const lo = Math.min(options.devPageRange.start, options.devPageRange.end);
+    const hi = Math.max(options.devPageRange.start, options.devPageRange.end);
+    devLog(`Zakres DEV: strony/slajdy ${lo}–${hi} → ${sourcePages.length} stron po filtrze`);
+  }
+  if (sourcePages.length === 0) {
     throw new Error("Brak treści do wygenerowania testu.");
   }
+  const generationMode = options?.mode ?? "smart_chunking";
+  let chunksToProcess: SmartChunk[] =
+    generationMode === "legacy_page_mode"
+      ? sourcePages.map((p, idx) => ({
+          id: `legacy-${idx + 1}`,
+          startPage: p.slide_index,
+          endPage: p.slide_index,
+          representativePage: p.slide_index,
+          pageRange: `${p.slide_index}`,
+          context: p.context,
+          sourcePages: [p],
+          visionNotes: [],
+        }))
+      : buildSmartChunks(sourcePages);
 
   devLog(
-    `Start: model=${model}, lowSpec=${getLowSpecTestModeEnabled()}, stron=${pages.length}, próby/strona=${perf.attempts}, num_predict=${perf.numPredict}`,
+    `Start: model=${model}, mode=${generationMode}, lowSpec=${getLowSpecTestModeEnabled()}, paczek=${chunksToProcess.length}, próby/paczka=${perf.attempts}`,
   );
   const idxPreview =
-    pages.length <= 24
-      ? pages.map((p) => p.slide_index).join(", ")
-      : `${pages
+    chunksToProcess.length <= 24
+      ? chunksToProcess.map((p) => p.pageRange).join(", ")
+      : `${chunksToProcess
           .slice(0, 18)
-          .map((p) => p.slide_index)
-          .join(", ")}, … (+${pages.length - 18})`;
-  devLog(`Kolejka stron (${pages.length}): ${idxPreview}`);
+          .map((p) => p.pageRange)
+          .join(", ")}, … (+${chunksToProcess.length - 18})`;
+  devLog(`Kolejka paczek (${chunksToProcess.length}): ${idxPreview}`);
 
   const all: GeneratedTestQuestion[] = [];
+  const preOptimizerCandidates: GeneratedTestQuestion[] = [];
   let pagesWithAnyParsed = 0;
   let lastPageFailure: string | null = null;
-  for (let i = 0; i < pages.length; i++) {
-    const page = pages[i]!;
-    const target = countForPage();
-    const useVision =
-      perf.allowVision &&
-      options?.sourceKind?.toLowerCase() === "pdf" &&
-      !!options.filePath &&
-      page.slide_index > 0 &&
-      pageNeedsVisionForTest(page.context);
-
-    const modeLabel = useVision
-      ? "obraz strony"
-      : options?.sourceKind?.toLowerCase() === "pdf"
-        ? "tekst z PDF"
-        : "tekst ze slajdów";
+  const rejectReasons = buildEmptyRejectReasons();
+  let totalQualityScore = 0;
+  let qualityScoredCount = 0;
+  let textCalls = 0;
+  let visionCalls = 0;
+  let totalLatencyMs = 0;
+  const targetRange = computeQuestionTargetRange(
+    options?.finalQuestionLimit ?? DEFAULT_FINAL_QUESTION_LIMIT,
+  );
+  const targetFinalQuestionsMin = targetRange.min;
+  const targetFinalQuestionsMax = targetRange.max;
+  const plannedPerChunk = computePlannedPerChunk(
+    targetFinalQuestionsMin,
+    chunksToProcess.length,
+    getLowSpecTestModeEnabled(),
+  );
+  const totalTargetQuestions = chunksToProcess.length * plannedPerChunk;
+  const minNegativeQuestions = Math.ceil(totalTargetQuestions * NEGATIVE_QUESTION_RATIO_MIN);
+  const maxNegativeQuestions = Math.floor(totalTargetQuestions * NEGATIVE_QUESTION_RATIO_MAX);
+  let currentNegativeQuestions = 0;
+  for (let i = 0; i < chunksToProcess.length; i++) {
+    const chunk = chunksToProcess[i]!;
+    const enrich = await enrichChunkWithVisionNotes(chunk, model, options, perf);
+    chunksToProcess[i] = enrich.chunk;
+    visionCalls += enrich.visionCalls;
+    const target = plannedPerChunk;
     onProgress?.({
-      label: `Tworzę pytania ze strony ${page.slide_index} (${target}) — ${modeLabel}…`,
-      percent: 8 + Math.round(((i + 0.2) / pages.length) * 84),
+      label: `Tworzę pytania dla paczki ${chunk.pageRange} (${target})…`,
+      percent: 8 + Math.round(((i + 0.2) / chunksToProcess.length) * 84),
     });
 
     devLog(
-      `--- Strona ${page.slide_index} [${i + 1}/${pages.length}] ${useVision ? "vision" : "tekst"} | ctxLen=${page.context.length} | cel=${target} pytań`,
+      `--- Paczka ${chunk.pageRange} [${i + 1}/${chunksToProcess.length}] | ctxLen=${chunk.context.length} | visionNotes=${chunk.visionNotes.length} | cel=${target} pytań`,
     );
 
     const system =
-      "Jesteś generatorem pytań testowych ABCD po polsku. Zwracasz WYŁĄCZNIE tablicę JSON — bez rozpisywania planu ani kroków rozumowania w odpowiedzi, tylko gotowa tablica.";
+      "Jesteś akademickim twórcą pytań egzaminacyjnych. Twoim celem jest poziom trudności Medical Board Exam. Skup się na mechanizmach, diagnostyce różnicowej i skutkach klinicznych. Dystraktory muszą być medycznie poprawne w innym kontekście. Wymagaj syntezy wiedzy z całego fragmentu (Cross-page reasoning). Unikaj pytań o proste definicje. Zwracasz WYŁĄCZNIE tablicę JSON.";
 
     const jsonAndRules = `Format JSON:
 [
@@ -484,81 +939,100 @@ export async function generateTestQuestionsFromChunks(
 ]
 
 Zasady:
-- każde pytanie dotyczy INNEGO faktu ze strony;
+- każde pytanie dotyczy INNEGO faktu z paczki slajdów;
 - tylko jedna poprawna odpowiedź;
+- pytanie ma sprawdzać mechanizm, różnicowanie albo skutek kliniczny;
+- wymagaj cross-page reasoning (łączenie min. 2 faktów z paczki);
 - unikaj "wszystkie powyższe" i "żadne z powyższych";
 - jeśli pytanie dotyczy grafiki/diagramu/wykresu/tabeli, ustaw requires_image=true i podaj kadr (crop_x/y/w/h) tego elementu w procentach strony;
 - jeśli pytanie nie dotyczy grafiki, ustaw requires_image=false i zostaw crop_* jako 0;
 - nie używaj markdown.`;
 
+    const remainingPages = chunksToProcess.length - i;
+    const remainingMinNeeded = Math.max(0, minNegativeQuestions - currentNegativeQuestions);
+    const mustForceNegativeNow = remainingMinNeeded >= remainingPages;
+    const canAddNegative = currentNegativeQuestions < maxNegativeQuestions;
+    const negativeGuidance = mustForceNegativeNow
+      ? "W tej odpowiedzi DOKŁADNIE jedno z pytań ma być negatywne (np. „Które NIE jest ...”)."
+      : canAddNegative
+        ? "Możesz dać pytanie negatywne, ale nie więcej niż jedno w tym zestawie."
+        : "Nie twórz pytania negatywnego w tym zestawie.";
+    const primaryArchetype = QUESTION_ARCHETYPES[i % QUESTION_ARCHETYPES.length];
+    const secondaryArchetype =
+      QUESTION_ARCHETYPES[(i + 1) % QUESTION_ARCHETYPES.length];
+    const benchmarkGuidance = `Difficulty Blueprint:
+- poziom trudności pytań: 3-4/5 (egzaminowy, nie trywialny recall),
+- archetyp pytania #1: ${primaryArchetype},
+- archetyp pytania #2: ${secondaryArchetype},
+- co najmniej jedno pytanie ma wymagać powiązania 2+ faktów z kontekstu strony.`;
+    const useVision = chunk.visionNotes.length > 0;
+
     const user = useVision
-      ? `Zwróć DOKŁADNIE jedną tablicę JSON z ${target} obiektami (elementów musi być ${target} — nie jeden, nie trzy).
-
-Na podstawie WYŁĄCZNIE przesłanego obrazu strony ${page.slide_index} utwórz te ${target} pytań testowych wielokrotnego wyboru. Odczytaj treść z obrazu (tekst, tabela, wykres). Nie ma osobnej warstwy tekstowej w tym pytaniu.
+      ? `Przeanalizuj paczkę slajdów (${chunk.pageRange}). Wygeneruj DOKŁADNIE ${target} trudne pytania ABCD w formacie JSON. Pytania muszą łączyć fakty z różnych części fragmentu.
 
 ${jsonAndRules}
 
-To jest strona ${page.slide_index} w dokumencie — pytania muszą wynikać tylko z tego, co widać na obrazie.`
-      : `Zwróć DOKŁADNIE jedną tablicę JSON z ${target} obiektami (elementów musi być ${target} — nie jeden, nie trzy).
+${negativeGuidance}
+${benchmarkGuidance}
 
-Na podstawie kontekstu utwórz te ${target} pytań testowych wielokrotnego wyboru.
-
-${jsonAndRules}
-
-Kontekst strony ${page.slide_index}:
+KONTEKST (obrazy + notatki wizji):
 ---
-${page.context.slice(0, MAX_PAGE_CONTEXT_CHARS_TEXT).trim()}
+${chunk.context.slice(0, MAX_PAGE_CONTEXT_CHARS_TEXT).trim()}
+---`
+      : `Przeanalizuj poniższą paczkę slajdów (${chunk.pageRange}). Wygeneruj DOKŁADNIE ${target} trudne pytania ABCD w formacie JSON. Pytania muszą łączyć fakty z różnych części tego fragmentu.
+
+${jsonAndRules}
+
+${negativeGuidance}
+${benchmarkGuidance}
+
+KONTEKST:
+---
+${chunk.context.slice(0, MAX_PAGE_CONTEXT_CHARS_TEXT).trim()}
 ---`;
 
     let generated: GeneratedTestQuestion[] = [];
     const attempts = perf.attempts;
     for (let a = 0; a < attempts; a++) {
-      const basePercent = 8 + Math.round(((i + 0.25 + a * 0.2) / pages.length) * 84);
+      const basePercent = 8 + Math.round(((i + 0.25 + a * 0.2) / chunksToProcess.length) * 84);
       let heartbeat = 0;
       onProgress?.({
-        label: `Strona ${page.slide_index}: próba ${a + 1}/${attempts}…`,
+        label: `Paczka ${chunk.pageRange}: próba ${a + 1}/${attempts}…`,
         percent: Math.min(94, basePercent),
       });
       const heartbeatId = setInterval(() => {
         heartbeat += 1;
         onProgress?.({
-          label: `Strona ${page.slide_index}: generuję pytania (${heartbeat * 3}s)…`,
+          label: `Paczka ${chunk.pageRange}: generuję pytania (${heartbeat * 3}s)…`,
           percent: Math.min(94, basePercent),
         });
       }, HEARTBEAT_MS);
       try {
         let raw: string;
-        if (useVision && options.filePath) {
-          const pageImage = await pdfPageToImageBase64(
-            options.filePath,
-            page.slide_index,
-            getLowSpecTestModeEnabled()
-              ? PDF_PAGE_IMAGE_LOW_SPEC_OPTIONS
-              : PDF_PAGE_IMAGE_TEST_VISION_OPTIONS,
-          );
+        const runtime = getAttemptRuntimeProfile(perf, a);
+        const callStartedAt = Date.now();
+        if (chunk.visionNotes.length > 0) {
+          textCalls += 1;
           raw = await runOllamaJsonChatForTests(
             model,
             options,
-            perf.numPredict,
-            TEST_GEN_CALL_TIMEOUT_MS,
-            `Generowanie pytań (strona ${page.slide_index})`,
+            runtime.numPredict,
+            runtime.timeoutMs,
+            `Generowanie pytań (paczka ${chunk.pageRange})`,
+            null,
             [
-              {
-                role: "system",
-                content:
-                  `${system} Masz tylko obraz jednej strony PDF — odczytaj z niego treść i kadruj elementy wizualne przy requires_image.`,
-              },
-              { role: "user", content: user, images: [pageImage] },
+              { role: "system", content: system },
+              { role: "user", content: user },
             ],
-            [],
           );
         } else {
+          textCalls += 1;
           raw = await runOllamaJsonChatForTests(
             model,
             options,
-            perf.numPredict,
-            TEST_GEN_CALL_TIMEOUT_MS,
-            `Generowanie pytań (strona ${page.slide_index})`,
+            runtime.numPredict,
+            runtime.timeoutMs,
+            `Generowanie pytań (paczka ${chunk.pageRange})`,
             null,
             [
               { role: "system", content: system },
@@ -566,14 +1040,33 @@ ${page.context.slice(0, MAX_PAGE_CONTEXT_CHARS_TEXT).trim()}
             ],
           );
         }
-        generated = parseQuestions(raw, page.slide_index);
+        totalLatencyMs += Date.now() - callStartedAt;
+        const parsed = parseQuestions(raw, chunk.representativePage);
+        generated = parsed.questions;
+        rejectReasons.invalid_shape += parsed.rejects.invalid_shape;
+        rejectReasons.duplicate_options += parsed.rejects.duplicate_options;
+        rejectReasons.invalid_json += parsed.rejects.invalid_json;
+        const qualityKept: GeneratedTestQuestion[] = [];
+        for (const q of generated) {
+          const quality = scoreQuestionQuality(q, chunk.context);
+          totalQualityScore += quality.score;
+          qualityScoredCount += 1;
+          if (quality.score < QUALITY_GATE_MIN_SCORE) {
+            rejectReasons.quality_gate += 1;
+            continue;
+          }
+          qualityKept.push(q);
+        }
+        generated = qualityKept;
         devLog(
-          `  próba ${a + 1}/${attempts}: odpowiedź ${raw.length} zn. → ${generated.length} pytań po walidacji`,
+          `  próba ${a + 1}/${attempts}: odpowiedź ${raw.length} zn. → ${generated.length} pytań po quality gate (>=${QUALITY_GATE_MIN_SCORE}/6)`,
         );
       } catch (e) {
         lastPageFailure =
-          e instanceof Error ? e.message : `Strona ${page.slide_index}: ${String(e)}`;
+          e instanceof Error ? e.message : `Paczka ${chunk.pageRange}: ${String(e)}`;
         generated = [];
+        const reason = classifyGenerationError(e);
+        rejectReasons[reason] += 1;
         devLog(
           `  próba ${a + 1}/${attempts}: BŁĄD ${lastPageFailure}`,
         );
@@ -583,13 +1076,13 @@ ${page.context.slice(0, MAX_PAGE_CONTEXT_CHARS_TEXT).trim()}
       if (generated.length >= target) break;
     }
 
-    if (generated.length > 0 && generated.length < target) {
-      const need = target - generated.length;
+    if (generated.length < target) {
+      let need = target - generated.length;
       onProgress?.({
-        label: `Strona ${page.slide_index}: uzupełniam brakujące pytania (${need})…`,
+        label: `Paczka ${chunk.pageRange}: uzupełniam brakujące pytania (${need})…`,
         percent: Math.min(
           94,
-          8 + Math.round(((i + 0.85) / pages.length) * 84),
+          8 + Math.round(((i + 0.85) / chunksToProcess.length) * 84),
         ),
       });
       const excludeBlock = generated
@@ -597,102 +1090,146 @@ ${page.context.slice(0, MAX_PAGE_CONTEXT_CHARS_TEXT).trim()}
         .join("\n");
       const topUpIntro = `Wygeneruj DOKŁADNIE ${need} dodatkowe pytania (tablica JSON z ${need} obiektami). Każde dotyczy INNEGO faktu niż poniższe — nie duplikuj treści.
 
-Już wygenerowane pytania na tej stronie (nie powtarzaj):
+Już wygenerowane pytania w tej paczce (nie powtarzaj):
 ${excludeBlock}
 
 ${jsonAndRules}`;
       const topUpUser = useVision
         ? `${topUpIntro}
 
-Dane wyłącznie z obrazu strony ${page.slide_index} (jak wcześniej).`
+Kontekst paczki ${chunk.pageRange} (w tym VISION_NOTES jak wcześniej).`
         : `${topUpIntro}
 
-Kontekst strony ${page.slide_index}:
+Kontekst paczki ${chunk.pageRange}:
 ---
-${page.context.slice(0, MAX_PAGE_CONTEXT_CHARS_TEXT).trim()}
+${chunk.context.slice(0, MAX_PAGE_CONTEXT_CHARS_TEXT).trim()}
 ---`;
-      try {
-        let rawTop: string;
-        if (useVision && options.filePath) {
-          const pageImage = await pdfPageToImageBase64(
-            options.filePath,
-            page.slide_index,
-            getLowSpecTestModeEnabled()
-              ? PDF_PAGE_IMAGE_LOW_SPEC_OPTIONS
-              : PDF_PAGE_IMAGE_TEST_VISION_OPTIONS,
+      const seen = new Set(
+        generated.map((g) => normalizeText(g.question).toLowerCase()),
+      );
+      for (let r = 0; r < SINGLE_QUESTION_RETRY_MAX && need > 0; r++) {
+        try {
+          let rawTop: string;
+          const runtimeTop = getAttemptRuntimeProfile(perf, r);
+          const topStartedAt = Date.now();
+          if (useVision) {
+            textCalls += 1;
+            rawTop = await runOllamaJsonChatForTests(
+              model,
+              options,
+              runtimeTop.numPredict,
+              runtimeTop.timeoutMs,
+              `Uzupełnianie pytań (paczka ${chunk.pageRange})`,
+              null,
+              [
+                {
+                  role: "system",
+                  content:
+                    `${system} Uzupełniasz zestaw — zwróć WYŁĄCZNIE tablicę z samymi nowymi pytaniami (${need} szt.).`,
+                },
+                { role: "user", content: topUpUser },
+              ],
+            );
+          } else {
+            textCalls += 1;
+            rawTop = await runOllamaJsonChatForTests(
+              model,
+              options,
+              runtimeTop.numPredict,
+              runtimeTop.timeoutMs,
+              `Uzupełnianie pytań (paczka ${chunk.pageRange})`,
+              null,
+              [
+                {
+                  role: "system",
+                  content:
+                    `${system} Uzupełniasz zestaw — zwróć WYŁĄCZNIE tablicę z samymi nowymi pytaniami (${need} szt.).`,
+                },
+                { role: "user", content: topUpUser },
+              ],
+            );
+          }
+          totalLatencyMs += Date.now() - topStartedAt;
+          const parsedExtra = parseQuestions(rawTop, chunk.representativePage);
+          rejectReasons.invalid_shape += parsedExtra.rejects.invalid_shape;
+          rejectReasons.duplicate_options += parsedExtra.rejects.duplicate_options;
+          rejectReasons.invalid_json += parsedExtra.rejects.invalid_json;
+          const extra = parsedExtra.questions.filter((q) => {
+            const quality = scoreQuestionQuality(q, chunk.context);
+            totalQualityScore += quality.score;
+            qualityScoredCount += 1;
+            if (quality.score < QUALITY_GATE_MIN_SCORE) {
+              rejectReasons.quality_gate += 1;
+              return false;
+            }
+            return true;
+          });
+          for (const e of extra) {
+            if (generated.length >= target) break;
+            const k = normalizeText(e.question).toLowerCase();
+            if (seen.has(k)) {
+              rejectReasons.duplicate_question += 1;
+              continue;
+            }
+            seen.add(k);
+            generated.push(e);
+          }
+          need = target - generated.length;
+          devLog(
+            `  uzupełnienie ${r + 1}/${SINGLE_QUESTION_RETRY_MAX}: +${extra.length} → ${generated.length}/${target}`,
           );
-          rawTop = await runOllamaJsonChatForTests(
-            model,
-            options,
-            perf.numPredict,
-            TEST_GEN_CALL_TIMEOUT_MS,
-            `Uzupełnianie pytań (strona ${page.slide_index})`,
-            [
-              {
-                role: "system",
-                content:
-                  `${system} Uzupełniasz zestaw — zwróć WYŁĄCZNIE tablicę z samymi nowymi pytaniami (${need} szt.).`,
-              },
-              { role: "user", content: topUpUser, images: [pageImage] },
-            ],
-            [],
-          );
-        } else {
-          rawTop = await runOllamaJsonChatForTests(
-            model,
-            options,
-            perf.numPredict,
-            TEST_GEN_CALL_TIMEOUT_MS,
-            `Uzupełnianie pytań (strona ${page.slide_index})`,
-            null,
-            [
-              {
-                role: "system",
-                content:
-                  `${system} Uzupełniasz zestaw — zwróć WYŁĄCZNIE tablicę z samymi nowymi pytaniami (${need} szt.).`,
-              },
-              { role: "user", content: topUpUser },
-            ],
-          );
+        } catch (e) {
+          const msg = e instanceof Error ? e.message : String(e);
+          const reason = classifyGenerationError(e);
+          rejectReasons[reason] += 1;
+          devLog(`  uzupełnienie ${r + 1}/${SINGLE_QUESTION_RETRY_MAX}: BŁĄD ${msg}`);
         }
-        const extra = parseQuestions(rawTop, page.slide_index);
-        const seen = new Set(
-          generated.map((g) => normalizeText(g.question).toLowerCase()),
-        );
-        for (const e of extra) {
-          if (generated.length >= target) break;
-          const k = normalizeText(e.question).toLowerCase();
-          if (seen.has(k)) continue;
-          seen.add(k);
-          generated.push(e);
-        }
-        devLog(
-          `  uzupełnienie: surowo +${extra.length} → łącznie ${generated.length}/${target} po scaleniu`,
-        );
-      } catch (e) {
-        const msg = e instanceof Error ? e.message : String(e);
-        devLog(`  uzupełnienie: BŁĄD ${msg}`);
       }
     }
 
     if (generated.length > 0) pagesWithAnyParsed += 1;
     const take = generated.slice(0, target);
+    currentNegativeQuestions += take.filter((q) => isNegativeQuestionStem(q.question)).length;
     devLog(
-      `Strona ${page.slide_index}: do banku ${take.length}/${target} pytań (po próbach)`,
+      `Paczka ${chunk.pageRange}: do banku ${take.length}/${target} pytań (po próbach)`,
     );
     all.push(...take);
+    preOptimizerCandidates.push(...take);
   }
 
   devLog(`Surowe pytania (łącznie, przed deduplikacją): ${all.length}`);
-  const deduped = dedupeQuestions(all);
+  let optimized = all;
+  let fallbackUsed = false;
+  let optimizerApplied = false;
+  if (generationMode === "smart_chunking") {
+    try {
+      optimized = await optimizeQuizSet(
+        model,
+        options,
+        all,
+        targetFinalQuestionsMin,
+        targetFinalQuestionsMax,
+      );
+      optimizerApplied = true;
+      devLog(
+        `Quiz Optimizer: ${all.length} -> ${optimized.length} (zakres=${targetFinalQuestionsMin}-${targetFinalQuestionsMax})`,
+      );
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : String(e);
+      devLog(`Quiz Optimizer: BŁĄD ${msg} (fallback do lokalnej deduplikacji)`);
+    }
+  }
+  const dedupeResult = dedupeQuestions(optimized);
+  let deduped = dedupeResult.deduped.slice(0, targetFinalQuestionsMax);
+  rejectReasons.duplicate_question += dedupeResult.removed + Math.max(0, optimized.length - deduped.length - dedupeResult.removed);
   devLog(
-    `Po deduplikacji: ${deduped.length} (odrzucono ${all.length - deduped.length} duplikatów treści pytania)`,
+    `Po deduplikacji/finalizacji: ${deduped.length} (odrzucono ${all.length - deduped.length})`,
   );
   onProgress?.({ label: "Finalizuję test…", percent: 96 });
   if (deduped.length === 0) {
     const hint =
       pagesWithAnyParsed === 0
-        ? " Żadna strona nie zwróciła poprawnego zestawu pytań — często: timeout (3 min na stronę), Ollama przeciążona, model bez sensownego JSON lub powtarzające się opcje ABCD (walidacja odrzuca pytanie)."
+        ? " Żadna paczka nie zwróciła poprawnego zestawu pytań — często: timeout (5 min na paczkę), Ollama przeciążona, model bez sensownego JSON lub powtarzające się opcje ABCD (walidacja odrzuca pytanie)."
         : " Wszystkie kandydaty odrzucono przy deduplikacji (powtarzające się treści pytań).";
     const last =
       lastPageFailure != null
@@ -702,9 +1239,146 @@ ${page.context.slice(0, MAX_PAGE_CONTEXT_CHARS_TEXT).trim()}
       `KONIEC BŁĄD: 0 pytań po deduplikacji (stron z jakimkolwiek parsowaniem: ${pagesWithAnyParsed}).${last}`,
     );
     throw new Error(
-      `Nie udało się zebrać pytań testowych po ${pages.length} stronach (${pagesWithAnyParsed} stron z jakimkolwiek wynikiem parsowania).${hint}${last}`,
+      `Nie udało się zebrać pytań testowych po ${chunksToProcess.length} paczkach (${pagesWithAnyParsed} paczek z jakimkolwiek wynikiem parsowania).${hint}${last}`,
     );
   }
-  devLog(`Sukces: zwracam ${deduped.length} pytań do zapisu w bazie.`);
-  return deduped;
+  if (deduped.length < targetFinalQuestionsMin) {
+    const fallbackDeduped = dedupeQuestions(preOptimizerCandidates).deduped.slice(
+      0,
+      targetFinalQuestionsMax,
+    );
+    if (fallbackDeduped.length >= targetFinalQuestionsMin) {
+      deduped = fallbackDeduped;
+      fallbackUsed = true;
+      devLog(
+        `Fallback minimum: użyto zbioru sprzed optimizera (${deduped.length}/${targetFinalQuestionsMin}-${targetFinalQuestionsMax}).`,
+      );
+    } else {
+      deduped = fallbackDeduped;
+      // Ostatnia dogrywka: próbujemy domknąć minimum N, paczka po paczce.
+      let globalNeed = targetFinalQuestionsMin - deduped.length;
+      if (globalNeed > 0) {
+        for (let r = 0; r < 4 && globalNeed > 0; r++) {
+          try {
+            const extra = await generateChunkFocusedTopUpQuestions(
+              model,
+              options,
+              chunksToProcess,
+              deduped,
+              globalNeed,
+            );
+            const seen = new Set(
+              deduped.map((q) => normalizeText(q.question).toLowerCase()),
+            );
+            const accepted: GeneratedTestQuestion[] = [];
+            const catchupQualityMin =
+              r < 2 ? QUALITY_GATE_MIN_SCORE - 1 : QUALITY_GATE_MIN_SCORE - 2;
+            for (const q of extra) {
+              const key = normalizeText(q.question).toLowerCase();
+              if (!key || seen.has(key)) continue;
+              const quality = scoreQuestionQuality(
+                q,
+                chunksToProcess.map((c) => c.context).join("\n\n"),
+              );
+              totalQualityScore += quality.score;
+              qualityScoredCount += 1;
+              if (quality.score < catchupQualityMin) {
+                rejectReasons.quality_gate += 1;
+                continue;
+              }
+              seen.add(key);
+              accepted.push(q);
+            }
+            deduped = [...deduped, ...accepted].slice(0, targetFinalQuestionsMax);
+            fallbackUsed = true;
+            globalNeed = targetFinalQuestionsMin - deduped.length;
+            devLog(
+              `Chunk top-up ${r + 1}/4: +${accepted.length}, łącznie ${deduped.length}/${targetFinalQuestionsMin}-${targetFinalQuestionsMax}, gate>=${catchupQualityMin}/6`,
+            );
+          } catch (e) {
+            const msg = e instanceof Error ? e.message : String(e);
+            devLog(`Chunk top-up ${r + 1}/4: BŁĄD ${msg}`);
+          }
+        }
+      }
+      // Ostatnia awaryjna dogrywka: jeśli brakuje 1-2 pytań, domykamy minimum
+      // bez dodatkowego zaostrzania quality gate (wciąż z walidacją struktury i dedupe).
+      if (deduped.length < targetFinalQuestionsMin) {
+        let emergencyNeed = targetFinalQuestionsMin - deduped.length;
+        if (emergencyNeed > 0 && emergencyNeed <= 2) {
+          try {
+            const emergency = await generateChunkFocusedTopUpQuestions(
+              model,
+              options,
+              chunksToProcess,
+              deduped,
+              emergencyNeed,
+            );
+            const seen = new Set(
+              deduped.map((q) => normalizeText(q.question).toLowerCase()),
+            );
+            const accepted: GeneratedTestQuestion[] = [];
+            for (const q of emergency) {
+              if (accepted.length >= emergencyNeed) break;
+              const key = normalizeText(q.question).toLowerCase();
+              if (!key || seen.has(key)) continue;
+              seen.add(key);
+              // Awaryjnie dopuszczamy pytania, które przeszły walidację strukturalną,
+              // ale mogły odpaść na jakości; lepiej domknąć target niż kończyć błędem.
+              accepted.push(q);
+            }
+            if (accepted.length > 0) {
+              deduped = [...deduped, ...accepted].slice(0, targetFinalQuestionsMax);
+              fallbackUsed = true;
+              devLog(
+                `Emergency top-up: +${accepted.length}, łącznie ${deduped.length}/${targetFinalQuestionsMin}-${targetFinalQuestionsMax}`,
+              );
+            }
+          } catch (e) {
+            const msg = e instanceof Error ? e.message : String(e);
+            devLog(`Emergency top-up: BŁĄD ${msg}`);
+          }
+        }
+      }
+      if (deduped.length < targetFinalQuestionsMin) {
+        // Nie przerywamy procesu błędem — decyzję o zapisie niepełnego zestawu
+        // podejmie użytkownik w UI.
+        devLog(
+          `Minimum nieosiągnięte: ${deduped.length}/${targetFinalQuestionsMin} (maksimum ${targetFinalQuestionsMax}).`,
+        );
+      }
+    }
+  }
+  const qualityAverage = qualityScoredCount > 0 ? totalQualityScore / qualityScoredCount : 0;
+  devLog(
+    `Sukces: zwracam ${deduped.length} pytań do zapisu w bazie. Quality avg=${qualityAverage.toFixed(2)}/6`,
+  );
+  return {
+    questions: deduped,
+    metrics: {
+      model,
+      isLowSpec: getLowSpecTestModeEnabled(),
+      generationMode,
+      chunkCount: chunksToProcess.length,
+      pageRanges: chunksToProcess.map((c) => c.pageRange),
+      targetQuestionLimit: targetFinalQuestionsMin,
+      targetQuestionMax: targetFinalQuestionsMax,
+      minimumSatisfied: deduped.length >= targetFinalQuestionsMin,
+      plannedPerChunk,
+      generatedPreOptimizer: all.length,
+      generatedPostOptimizer: optimized.length,
+      fallbackUsed,
+      optimizerApplied,
+      optimizerDropCount: Math.max(0, all.length - deduped.length),
+      pagesTotal: sourcePages.length,
+      pagesWithAnyParsed,
+      questionsBeforeDedupe: all.length,
+      questionsAfterDedupe: deduped.length,
+      qualityAverage,
+      textCalls,
+      visionCalls,
+      totalLatencyMs,
+      rejectReasons,
+    },
+  };
 }

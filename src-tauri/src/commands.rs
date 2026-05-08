@@ -58,6 +58,16 @@ fn apply_ollama_chat_options_to_body(
     }
 }
 
+fn classify_ollama_reqwest_error(prefix: &str, e: reqwest::Error) -> String {
+    if e.is_timeout() {
+        return format!("{} [timeout]: {}", prefix, e);
+    }
+    if e.is_connect() {
+        return format!("{} [connect]: {}", prefix, e);
+    }
+    format!("{} [transport]: {}", prefix, e)
+}
+
 #[derive(Debug, Serialize, Clone)]
 pub struct SlideChunk {
     pub slide_index: u32,
@@ -388,7 +398,7 @@ pub async fn ollama_chat_backend(
         .json(&body)
         .send()
         .await
-        .map_err(|e| format!("Ollama chat nie odpowiada: {}", e))?;
+        .map_err(|e| classify_ollama_reqwest_error("Ollama chat nie odpowiada", e))?;
     if !res.status().is_success() {
         let status = res.status();
         let text = res.text().await.unwrap_or_default();
@@ -429,7 +439,7 @@ pub async fn ollama_chat_with_images_backend(
         .json(&body)
         .send()
         .await
-        .map_err(|e| format!("Ollama chat(vision) nie odpowiada: {}", e))?;
+        .map_err(|e| classify_ollama_reqwest_error("Ollama chat(vision) nie odpowiada", e))?;
     if !res.status().is_success() {
         let status = res.status();
         let text = res.text().await.unwrap_or_default();
@@ -541,7 +551,7 @@ pub async fn ollama_chat_stream_backend(
         .json(&body)
         .send()
         .await
-        .map_err(|e| format!("Ollama chat (stream) nie odpowiada: {}", e))?;
+        .map_err(|e| classify_ollama_reqwest_error("Ollama chat (stream) nie odpowiada", e))?;
     if !res.status().is_success() {
         let status = res.status();
         let text = res.text().await.unwrap_or_default();
@@ -576,7 +586,7 @@ pub async fn ollama_chat_with_images_stream_backend(
         .json(&body)
         .send()
         .await
-        .map_err(|e| format!("Ollama chat vision (stream) nie odpowiada: {}", e))?;
+        .map_err(|e| classify_ollama_reqwest_error("Ollama chat vision (stream) nie odpowiada", e))?;
     if !res.status().is_success() {
         let status = res.status();
         let text = res.text().await.unwrap_or_default();
