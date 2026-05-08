@@ -1,6 +1,6 @@
 {
   "version": "0.1.12",
-  "notes": "EduMelon 0.1.12\n\n- Testy: nowy tryb Smart Chunking (domyślny), lepsze domykanie docelowej liczby pytań oraz fallback, gdy minimum nie zostało osiągnięte.\n- Testy DEV: metryki generowania i zapis runów do bazy (jakość, latency, rejecty, timeouty), plus możliwość wyboru trybu i limitu pytań.\n- Stabilność: lepsza klasyfikacja błędów transport/connect/timeout w komunikacji z Ollamą.\n",
+  "notes": "## 🚀 EduMelon v0.1.12\n\nData: 2026-05-08\n\n## ✨ Nowe\n- Testy są bardziej egzaminowe i częściej sprawdzają rozumienie, a nie tylko pamięć.\n- W narzędziach DEV przy generowaniu testów widzisz czytelniejsze podsumowanie jakości i powodów odrzuceń.\n\n## 🛠 Poprawki i zmiany\n- Stabilniejsze domykanie docelowej liczby pytań, także gdy model po drodze gubi część wyników.\n- Mniej sytuacji, w których generowanie kończy się bez użytecznego zestawu pytań.\n- Lepsze komunikaty, gdy problem wynika z czasu odpowiedzi modelu lub połączenia.\n\n## ⬆️ Jak zaktualizować\n- Ustawienia → Aktualizacje aplikacji → Sprawdź aktualizacje → Pobierz → Uruchom ponownie i zaktualizuj.\n",
   "pub_date": "2026-05-08T18:31:34Z",
   "platforms": {
     "windows-x86_64": {
