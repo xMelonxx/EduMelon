@@ -1,16 +1,34 @@
 import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
+import { hasGeminiKey } from "../lib/ai/GeminiProvider";
 import { ensureOllamaRunning } from "../lib/ollamaAutostart";
-import { isOnboardingDone } from "../lib/storage";
+import { isOnboardingDone, loadLocalProfile } from "../lib/storage";
 import { syncUsageStatsIfConsented } from "../lib/usageStats";
 
 export function RootGate() {
   const navigate = useNavigate();
-  const [msg, setMsg] = useState("Sprawdzanie Ollama…");
+  const [msg, setMsg] = useState("Przygotowuję aplikację…");
 
   useEffect(() => {
     let cancelled = false;
     (async () => {
+      const profile = loadLocalProfile();
+      const aiProvider = profile?.aiProvider ?? "ollama";
+
+      if (aiProvider === "gemini") {
+        const keyOk = await hasGeminiKey();
+        if (cancelled) return;
+        if (!keyOk || !isOnboardingDone()) {
+          navigate("/onboarding", { replace: true });
+          return;
+        }
+        void syncUsageStatsIfConsented();
+        setMsg("Przechodzę do pulpitu…");
+        navigate("/app/dashboard", { replace: true });
+        return;
+      }
+
+      setMsg("Sprawdzanie Ollama…");
       const ok = await ensureOllamaRunning();
       if (cancelled) return;
       if (!ok) {
@@ -21,7 +39,6 @@ export function RootGate() {
         navigate("/onboarding", { replace: true });
         return;
       }
-      // Best effort: anonimowe statystyki (jeśli użytkownik wyraził zgodę).
       void syncUsageStatsIfConsented();
       setMsg("Przechodzę do pulpitu…");
       navigate("/app/dashboard", { replace: true });

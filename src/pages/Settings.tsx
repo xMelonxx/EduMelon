@@ -1,11 +1,15 @@
 import { openUrl } from "@tauri-apps/plugin-opener";
 import { useEffect, useState } from "react";
+import type { AiProviderId } from "../lib/constants";
+import { GeminiKeySetup } from "../components/GeminiKeySetup";
+import { AiModelSelector } from "../components/AiModelSelector";
+import { GeminiUsagePanel } from "../components/GeminiUsageIndicator";
 import { OllamaModelsFolderSection } from "../components/OllamaModelsFolderSection";
 import {
   EMBEDDING_MODEL,
-  MODEL_PROFILES,
-  type ModelProfileId,
 } from "../lib/constants";
+import { getDefaultModelForProvider, modelProfileIdFromOllamaTag } from "../lib/ai/models";
+import { deleteGeminiKey, hasGeminiKey } from "../lib/ai/GeminiProvider";
 import {
   ollamaListModels,
   ollamaPull,
@@ -21,6 +25,8 @@ import {
   type AccentPresetId,
 } from "../lib/theme";
 import {
+  getAiModelId,
+  getAiProviderId,
   getLowSpecTestModeEnabled,
   getOllamaModelsDir,
   getOrCreateInstallId,
@@ -58,9 +64,6 @@ const FEEDBACK_ALLOWED_MIME_TYPES = new Set([
 export function Settings() {
   const navigate = useNavigate();
   const [profile, setProfile] = useState(loadLocalProfile());
-  const [model, setModel] = useState<ModelProfileId>(
-    profile?.modelProfile ?? "e2b-it",
-  );
   const [theme, setTheme] = useState<ThemePreference>(getThemePreference);
   const [accentColor, setAccentColorState] = useState<string>(getAccentColor() ?? "#4ade80");
   const [accentPreset, setAccentPreset] = useState<AccentPresetId | "custom">(
@@ -91,7 +94,18 @@ export function Settings() {
   const [versionTapCount, setVersionTapCount] = useState(0);
   const [devToolsUnlockedMsg, setDevToolsUnlockedMsg] = useState<string | null>(null);
   const [lowSpecTestMode, setLowSpecTestMode] = useState(getLowSpecTestModeEnabled);
+  const [aiProvider, setAiProvider] = useState<AiProviderId>(
+    profile?.aiProvider ?? getAiProviderId(),
+  );
+  const [aiModel, setAiModel] = useState<string>(
+    profile?.aiModel ?? getAiModelId(),
+  );
+  const [geminiConfigured, setGeminiConfigured] = useState(false);
   const devToolsEnabled = isDevToolsEnabled();
+
+  useEffect(() => {
+    void hasGeminiKey().then(setGeminiConfigured);
+  }, [aiProvider]);
 
   useEffect(() => {
     void (async () => {
@@ -109,9 +123,16 @@ export function Settings() {
 
   const save = () => {
     if (!profile) return;
-    const next = { ...profile, modelProfile: model };
+    const modelProfile =
+      modelProfileIdFromOllamaTag(aiModel) ?? profile.modelProfile ?? "e2b-it";
+    const next = {
+      ...profile,
+      aiProvider,
+      aiModel,
+      modelProfile,
+    };
     saveLocalProfile(next);
-    setProfile(next);
+    setProfile(loadLocalProfile());
     alert("Zapisano profil lokalnie.");
   };
 
@@ -119,7 +140,7 @@ export function Settings() {
     setPulling(true);
     setPullLog([]);
     try {
-      const tag = MODEL_PROFILES[model].ollamaTag;
+      const tag = aiModel;
       await ollamaPull(tag, (l) => setPullLog((p) => [...p.slice(-30), l]));
       await ollamaPull(EMBEDDING_MODEL, (l) =>
         setPullLog((p) => [...p.slice(-30), l]),
@@ -654,68 +675,70 @@ export function Settings() {
       </section>
 
       <section className="rounded-[24px] bg-surface-container-low border border-outline-variant p-8 space-y-4">
-        <h3 className="text-lg font-bold text-on-surface m-0">Model AI</h3>
-        <label className="flex items-start gap-3 cursor-pointer">
-          <input
-            type="radio"
-            name="m"
-            className="mt-1"
-            checked={model === "e2b-it"}
-            onChange={() => setModel("e2b-it")}
-          />
-          <span className="text-on-surface">
-            {MODEL_PROFILES["e2b-it"].label}{" "}
-            <code className="text-sm bg-surface-container-high px-2 py-0.5 rounded-lg">
-              {MODEL_PROFILES["e2b-it"].ollamaTag}
-            </code>
-          </span>
-        </label>
-        <label className="flex items-start gap-3 cursor-pointer">
-          <input
-            type="radio"
-            name="m"
-            className="mt-1"
-            checked={model === "e4b-it"}
-            onChange={() => setModel("e4b-it")}
-          />
-          <span className="text-on-surface">
-            {MODEL_PROFILES["e4b-it"].label}{" "}
-            <code className="text-sm bg-surface-container-high px-2 py-0.5 rounded-lg">
-              {MODEL_PROFILES["e4b-it"].ollamaTag}
-            </code>
-          </span>
-        </label>
-        <p className="text-sm text-on-surface-variant">
-          Embedding:{" "}
-          <code className="text-on-surface">{EMBEDDING_MODEL}</code>
-        </p>
-        <div className="flex flex-wrap gap-3 pt-2">
-          <button
-            type="button"
-            onClick={save}
-            className="melon-gradient text-white font-bold px-8 py-3 rounded-full shadow-melon"
-          >
-            Zapisz profil
-          </button>
-          <button
-            type="button"
-            disabled={pulling || !health}
-            onClick={() => void pullCurrent()}
-            className="bg-surface-container-highest text-on-surface font-bold px-8 py-3 rounded-full disabled:opacity-50"
-          >
-            {pulling ? "Pobieranie…" : "Pobierz modele"}
-          </button>
-        </div>
-        {pullLog.length > 0 && (
-          <pre className="text-xs bg-surface-container-high rounded-2xl p-4 max-h-28 overflow-auto">
-            {pullLog.join("\n")}
-          </pre>
+        <AiModelSelector
+          aiProvider={aiProvider}
+          aiModel={aiModel}
+          onProviderChange={(provider) => {
+            setAiProvider(provider);
+            setAiModel(getDefaultModelForProvider(provider));
+          }}
+          onModelChange={(model) => {
+            setAiModel(model.id);
+            setAiProvider(model.provider);
+          }}
+        />
+        {aiProvider === "gemini" && (
+          <>
+            <GeminiKeySetup
+              onReadyChange={(ok) => {
+                setGeminiConfigured(ok);
+              }}
+            />
+            <GeminiUsagePanel />
+            {geminiConfigured && (
+              <button
+                type="button"
+                onClick={() => void deleteGeminiKey().then(() => setGeminiConfigured(false))}
+                className="text-xs text-primary font-semibold bg-transparent border-0 cursor-pointer p-0"
+              >
+                Usuń zapisany klucz Gemini
+              </button>
+            )}
+          </>
         )}
-        {models.length > 0 && (
-          <p className="text-xs text-on-surface-variant break-words">
-            Zainstalowane: {models.join(", ")}
-          </p>
+        {aiProvider === "ollama" && (
+          <>
+            <p className="text-sm text-on-surface-variant m-0">
+              Embedding:{" "}
+              <code className="text-on-surface">{EMBEDDING_MODEL}</code>
+            </p>
+            <button
+              type="button"
+              disabled={pulling || !health}
+              onClick={() => void pullCurrent()}
+              className="bg-surface-container-highest text-on-surface font-bold px-8 py-3 rounded-full disabled:opacity-50"
+            >
+              {pulling ? "Pobieranie…" : "Pobierz modele"}
+            </button>
+            {pullLog.length > 0 && (
+              <pre className="text-xs bg-surface-container-high rounded-2xl p-4 max-h-28 overflow-auto">
+                {pullLog.join("\n")}
+              </pre>
+            )}
+            {models.length > 0 && (
+              <p className="text-xs text-on-surface-variant break-words">
+                Zainstalowane: {models.join(", ")}
+              </p>
+            )}
+          </>
         )}
+        <button
+          type="button"
+          onClick={save}
+          className="melon-gradient text-white font-bold px-8 py-3 rounded-full shadow-melon"
+        >
+          Zapisz wybór asystenta
+        </button>
       </section>
 
     </div>

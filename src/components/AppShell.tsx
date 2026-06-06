@@ -2,6 +2,7 @@ import { invoke } from "@tauri-apps/api/core";
 import { useEffect, useState } from "react";
 import { NavLink, Outlet, useLocation } from "react-router-dom";
 import { FirstRunTutorial } from "./FirstRunTutorial";
+import { GeminiUsageHeaderIndicator } from "./GeminiUsageIndicator";
 import {
   getThemePreference,
   setThemePreference,
@@ -364,6 +365,7 @@ export function AppShell() {
             </span>
           </div>
           <div className="flex items-center gap-2 pl-2">
+            <GeminiUsageHeaderIndicator />
             <button
               type="button"
               onClick={cycleTheme}

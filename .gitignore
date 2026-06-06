@@ -8,3 +8,7 @@ src-tauri/target/
 RELEASE_NOTES.md
 RESET_ONBOARDING.txt
 skills-lock.json
+RELEASE_AUTOPILOT.md
+release-notes/
+scripts/release.ps1
+docs/GEMINI_PROJECT_CONTEXT.md

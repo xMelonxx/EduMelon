@@ -3,7 +3,8 @@ import { invoke } from "@tauri-apps/api/core";
 import { Link, useParams } from "react-router-dom";
 import { Document, Page, pdfjs } from "react-pdf";
 import pdfWorker from "pdfjs-dist/build/pdf.worker.min.mjs?url";
-import { MODEL_PROFILES } from "../lib/constants";
+import { getActiveModelId } from "../lib/ai/aiManager";
+import { isGeminiRateLimitError } from "../lib/ai/geminiErrors";
 import {
   getPresentation,
   listChunksForPresentation,
@@ -28,12 +29,14 @@ import {
   type TestGenProgress,
   type TestGenerationOptions,
 } from "../lib/testsOllama";
+import { GeminiGenerationProgress } from "../components/GeminiGenerationProgress";
 import {
   cropImageBase64ByPercent,
   pdfGetPageCount,
   pdfPageToImageBase64,
 } from "../lib/pdfVisionOcr";
 import { isDevToolsEnabled } from "../lib/devtools";
+import { TestDifficultyPicker, getStoredTestDifficulty, type TestDifficulty } from "../components/TestDifficultyPicker";
 
 pdfjs.GlobalWorkerOptions.workerSrc = pdfWorker;
 
@@ -139,6 +142,7 @@ export function Tests() {
   const [idx, setIdx] = useState(0);
   const [stage, setStage] = useState<Stage>("idle");
   const [genProgress, setGenProgress] = useState<TestGenProgress | null>(null);
+  const [genElapsedSec, setGenElapsedSec] = useState(0);
   const [result, setResult] = useState<ResultState | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [pdfBlobUrl, setPdfBlobUrl] = useState<string | null>(null);
@@ -157,6 +161,9 @@ export function Tests() {
     "smart_chunking" | "legacy_page_mode"
   >("smart_chunking");
   const [finalQuestionLimitInput, setFinalQuestionLimitInput] = useState("20");
+  const [testDifficulty, setTestDifficulty] = useState<TestDifficulty>(
+    getStoredTestDifficulty,
+  );
   const [devLastGeneratedJson, setDevLastGeneratedJson] = useState<string | null>(
     null,
   );
@@ -276,6 +283,14 @@ export function Tests() {
     };
   }, [devToolsEnabled, filePath, sourceKind]);
 
+  useEffect(() => {
+    if (stage !== "in_progress" || !genProgress) return;
+    const t = setInterval(() => {
+      setGenElapsedSec((s) => s + 1);
+    }, 1000);
+    return () => clearInterval(t);
+  }, [stage, genProgress]);
+
   const current = questions[idx];
   const isPdfMaterial = sourceKind.toLowerCase() === "pdf";
   const currentResolvedCrop = useMemo(() => {
@@ -292,6 +307,8 @@ export function Tests() {
     setStage("in_progress");
     setError(null);
     setResult(null);
+    setGenElapsedSec(0);
+    setGenProgress({ label: "Przygotowuję generowanie testu…", percent: 2 });
     if (devToolsEnabled) {
       setDevLastGeneratedJson(null);
       setDevLastMetrics(null);
@@ -301,11 +318,12 @@ export function Tests() {
     }
     try {
       const chunks = await listChunksForPresentation(id);
-      const model = MODEL_PROFILES[profile.modelProfile].ollamaTag;
+      const model = getActiveModelId(profile);
       const genOpts: TestGenerationOptions = {
         sourceKind,
         filePath,
         mode: devGenerationMode,
+        difficulty: testDifficulty,
       };
       const finalLimitParsed = parseInt(finalQuestionLimitInput, 10);
       if (Number.isFinite(finalLimitParsed) && finalLimitParsed > 0) {
@@ -394,7 +412,11 @@ export function Tests() {
       await saveTestGenerationRun(id, metrics);
       await load();
     } catch (e) {
-      const msg = e instanceof Error ? e.message : String(e);
+      const msg = isGeminiRateLimitError(e)
+        ? e.userMessage
+        : e instanceof Error
+          ? e.message
+          : String(e);
       setError(msg);
       if (devToolsEnabled) {
         appendDevLog(`BŁĄD (przerwanie): ${msg}`);
@@ -423,8 +445,8 @@ export function Tests() {
     }
   };
 
-  const regenerateTestDev = async () => {
-    if (!id || !profile || !devToolsEnabled) return;
+  const regenerateTest = async () => {
+    if (!id || !profile) return;
     if (
       !window.confirm(
         "Wygenerować test od zera? Obecny zestaw i historia podejść zostaną usunięte przed generowaniem.",
@@ -439,6 +461,11 @@ export function Tests() {
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e));
     }
+  };
+
+  const regenerateTestDev = async () => {
+    if (!devToolsEnabled) return;
+    await regenerateTest();
   };
 
   const startQuiz = (mode: QuizMode) => {
@@ -559,6 +586,28 @@ export function Tests() {
       ? latestReview
       : latestReview;
 
+  const testGenerationFields = (
+    <div className="flex flex-wrap gap-6 items-start">
+      <label className="flex flex-col gap-1 text-sm text-on-surface">
+        Ile pytań chcesz wygenerować?
+        <input
+          type="number"
+          min={1}
+          value={finalQuestionLimitInput}
+          disabled={stage === "in_progress"}
+          onChange={(e) => setFinalQuestionLimitInput(e.target.value)}
+          className="w-32 rounded-lg border border-outline-variant bg-surface-container px-3 py-2 text-on-surface text-sm"
+        />
+      </label>
+      <TestDifficultyPicker
+        value={testDifficulty}
+        disabled={stage === "in_progress"}
+        onChange={setTestDifficulty}
+        compact
+      />
+    </div>
+  );
+
   if (!id) {
     return <p className="p-8 text-on-surface-variant">Brak identyfikatora testu.</p>;
   }
@@ -638,6 +687,47 @@ export function Tests() {
               <h1 className="text-h2 font-heading font-semibold">{title || "Test z prezentacji"}</h1>
             </header>
 
+            {questionBank.length > 0 && (
+              <section className="rounded-[24px] bg-surface-container-low border border-outline-variant p-container-padding space-y-4">
+                <div>
+                  <h2 className="text-base font-semibold text-on-surface m-0">
+                    Ustawienia testu
+                  </h2>
+                  <p className="text-sm text-on-surface-variant mt-1 mb-0">
+                    Poziom trudności i liczba pytań przy kolejnym generowaniu.
+                  </p>
+                </div>
+                <div className="rounded-xl border border-outline-variant/50 bg-surface-container/50 p-4">
+                  {testGenerationFields}
+                </div>
+                <button
+                  type="button"
+                  disabled={stage === "in_progress"}
+                  onClick={() => void regenerateTest()}
+                  className="bg-surface-container-high text-on-surface font-bold px-6 py-3 rounded-xl text-sm disabled:opacity-50"
+                >
+                  {stage === "in_progress" ? "Generuję test…" : "Wygeneruj test od nowa"}
+                </button>
+                {genProgress && (
+                  <GeminiGenerationProgress
+                    progress={genProgress}
+                    elapsedSec={genElapsedSec}
+                    title="Generowanie testu"
+                    hint={
+                      genProgress.indeterminate
+                        ? "Przy dużym materiale generowanie może potrwać kilka minut."
+                        : undefined
+                    }
+                  />
+                )}
+                {error && (
+                  <p className="text-sm text-error bg-error/10 rounded-xl px-4 py-3 m-0">
+                    {error}
+                  </p>
+                )}
+              </section>
+            )}
+
             {devToolsEnabled && questionBank.length > 0 && (
               <section className="rounded-xl border border-dashed border-outline-variant bg-surface-container/50 p-4 space-y-3">
                 <div className="flex flex-wrap items-center gap-3">
@@ -678,17 +768,6 @@ export function Tests() {
                         <option value="smart_chunking">Smart Chunking (default)</option>
                         <option value="legacy_page_mode">Legacy (strona po stronie)</option>
                       </select>
-                    </label>
-                    <label className="flex flex-col gap-1 text-xs text-on-surface-variant">
-                      Ile pytań chcesz wygenerować?
-                      <input
-                        type="number"
-                        min={1}
-                        value={finalQuestionLimitInput}
-                        disabled={stage === "in_progress"}
-                        onChange={(e) => setFinalQuestionLimitInput(e.target.value)}
-                        className="w-24 rounded-lg border border-outline-variant bg-surface-container px-3 py-2 text-on-surface text-sm"
-                      />
                     </label>
                   </div>
                   <label className="flex items-start gap-3 text-sm text-on-surface cursor-pointer">
@@ -748,24 +827,14 @@ export function Tests() {
               </section>
             )}
 
-            {questions.length === 0 && (
+            {questionBank.length === 0 && (
               <section className="rounded-[24px] bg-surface-container-low border border-outline-variant p-container-padding space-y-4">
                 <p className="text-on-surface">
                   Ten materiał nie ma jeszcze wygenerowanego testu.
                 </p>
-                <div className="rounded-xl border border-outline-variant/50 bg-surface-container/50 p-4">
-                  <label className="flex flex-col gap-1 text-sm text-on-surface">
-                    Ile pytań chcesz wygenerować?
-                    <input
-                      type="number"
-                      min={1}
-                      value={finalQuestionLimitInput}
-                      disabled={stage === "in_progress"}
-                      onChange={(e) => setFinalQuestionLimitInput(e.target.value)}
-                      className="w-32 rounded-lg border border-outline-variant bg-surface-container px-3 py-2 text-on-surface text-sm"
-                    />
-                  </label>
-                  <p className="text-xs text-on-surface-variant mt-2 mb-0">
+                <div className="rounded-xl border border-outline-variant/50 bg-surface-container/50 p-4 space-y-4">
+                  {testGenerationFields}
+                  <p className="text-xs text-on-surface-variant m-0">
                     Przygotujemy pełny zestaw pytań z całego materiału.
                   </p>
                 </div>
@@ -833,18 +902,16 @@ export function Tests() {
                   {stage === "in_progress" ? "Generuję test…" : "Generuj test ABCD"}
                 </button>
                 {genProgress && (
-                  <div className="rounded-xl bg-surface-container p-4 space-y-2">
-                    <div className="flex items-center justify-between text-xs font-semibold text-on-surface">
-                      <span>{genProgress.label}</span>
-                      <span>{genProgress.percent}%</span>
-                    </div>
-                    <div className="h-2 rounded-full bg-surface-container-high overflow-hidden">
-                      <div
-                        className="h-full rounded-full bg-primary transition-[width] duration-300 ease-out"
-                        style={{ width: `${genProgress.percent}%` }}
-                      />
-                    </div>
-                  </div>
+                  <GeminiGenerationProgress
+                    progress={genProgress}
+                    elapsedSec={genElapsedSec}
+                    title="Generowanie testu"
+                    hint={
+                      genProgress.indeterminate
+                        ? "Przy dużym materiale generowanie może potrwać kilka minut."
+                        : undefined
+                    }
+                  />
                 )}
                 {error && (
                   <p className="text-sm text-error bg-error/10 rounded-xl px-4 py-3">{error}</p>

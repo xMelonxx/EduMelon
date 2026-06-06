@@ -50,6 +50,13 @@ export function OllamaGate() {
           </button>
         </div>
         {err && <p className="text-primary text-sm m-0">{err}</p>}
+        <button
+          type="button"
+          onClick={() => navigate("/onboarding", { state: { preferGemini: true } })}
+          className="text-sm text-primary font-semibold bg-transparent border-0 cursor-pointer underline"
+        >
+          Wolę użyć Gemini w chmurze
+        </button>
       </div>
     </div>
   );

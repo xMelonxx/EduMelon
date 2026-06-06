@@ -1,4 +1,15 @@
-import type { ModelProfileId } from "./constants";
+import type { AiProviderId, ModelProfileId } from "./constants";
+import {
+  getDefaultModelForProvider,
+  isKnownModelId,
+  modelProfileIdFromOllamaTag,
+  ollamaTagFromModelProfileId,
+} from "./ai/models";
+import {
+  isGeminiChatModelId,
+  migrateGeminiModelId,
+  type GeminiChatModelId,
+} from "./geminiModels";
 
 const KEY_ONBOARDING = "edumelon_onboarding_done";
 const KEY_PROFILE = "edumelon_profile";
@@ -15,7 +26,50 @@ export type LocalProfile = {
   university: string;
   fieldOfStudy: string;
   modelProfile: ModelProfileId;
+  aiProvider?: AiProviderId;
+  /** Wybrany model API (np. gemini-2.5-flash, gemma4:e2b). */
+  aiModel?: string;
+  /** @deprecated Użyj aiModel — zachowane dla migracji. */
+  geminiChatModel?: GeminiChatModelId;
 };
+
+function normalizeLocalProfile(p: LocalProfile): LocalProfile {
+  const aiProvider = p.aiProvider ?? "ollama";
+
+  let aiModel = p.aiModel;
+  if (!aiModel) {
+    if (aiProvider === "gemini" && p.geminiChatModel) {
+      aiModel = p.geminiChatModel;
+    } else {
+      aiModel = ollamaTagFromModelProfileId(p.modelProfile ?? "e2b-it");
+    }
+  }
+
+  if (!isKnownModelId(aiModel)) {
+    if (aiProvider === "gemini") {
+      aiModel = migrateGeminiModelId(aiModel);
+    } else {
+      aiModel = getDefaultModelForProvider(aiProvider);
+    }
+  }
+
+  let modelProfile = p.modelProfile ?? "e2b-it";
+  const fromTag = modelProfileIdFromOllamaTag(aiModel);
+  if (fromTag) modelProfile = fromTag;
+
+  const next: LocalProfile = {
+    ...p,
+    aiProvider,
+    aiModel,
+    modelProfile,
+  };
+
+  if (aiProvider === "gemini" && isGeminiChatModelId(aiModel)) {
+    next.geminiChatModel = aiModel;
+  }
+
+  return next;
+}
 
 export function isOnboardingDone(): boolean {
   return localStorage.getItem(KEY_ONBOARDING) === "1";
@@ -26,18 +80,34 @@ export function setOnboardingDone(): void {
 }
 
 export function saveLocalProfile(p: LocalProfile): void {
-  localStorage.setItem(KEY_PROFILE, JSON.stringify(p));
-  localStorage.setItem(KEY_MODEL, p.modelProfile);
+  const normalized = normalizeLocalProfile(p);
+  localStorage.setItem(KEY_PROFILE, JSON.stringify(normalized));
+  localStorage.setItem(KEY_MODEL, normalized.modelProfile);
 }
 
 export function loadLocalProfile(): LocalProfile | null {
   const raw = localStorage.getItem(KEY_PROFILE);
   if (!raw) return null;
   try {
-    return JSON.parse(raw) as LocalProfile;
+    const p = JSON.parse(raw) as LocalProfile;
+    return normalizeLocalProfile(p);
   } catch {
     return null;
   }
+}
+
+export function getAiModelId(): string {
+  const p = loadLocalProfile();
+  if (p?.aiModel) return p.aiModel;
+  return getDefaultModelForProvider(p?.aiProvider ?? getDefaultAiProviderForNewUser());
+}
+
+export function getAiProviderId(): AiProviderId {
+  return loadLocalProfile()?.aiProvider ?? "ollama";
+}
+
+export function getDefaultAiProviderForNewUser(): AiProviderId {
+  return "gemini";
 }
 
 export function getStoredModelProfile(): ModelProfileId | null {

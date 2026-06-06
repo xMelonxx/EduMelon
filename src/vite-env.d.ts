@@ -9,6 +9,9 @@ interface ImportMetaEnv {
   readonly VITE_OLLAMA_MODEL_E2B_IT?: string;
   readonly VITE_OLLAMA_MODEL_E4B_IT?: string;
   readonly VITE_OLLAMA_EMBEDDING_MODEL?: string;
+  readonly VITE_GEMINI_CHAT_MODEL?: string;
+  readonly VITE_GEMINI_EMBEDDING_MODEL?: string;
+  readonly VITE_GEMINI_DAILY_REQUEST_LIMIT?: string;
 }
 
 interface ImportMeta {

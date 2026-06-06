@@ -13,17 +13,20 @@ import {
   upsertSummaryForPresentation,
   type ChunkRow,
 } from "../lib/db";
-import { MODEL_PROFILES } from "../lib/constants";
-import {
-  ollamaChat,
-  ollamaChatStream,
-  ollamaChatWithImagesStream,
-  type ChatStreamDelta,
-} from "../lib/ollama";
+import { getActiveModelId, getAiProvider } from "../lib/ai/aiManager";
+import type { StreamDelta } from "../lib/ai/types";
+import { isGeminiRateLimitError } from "../lib/ai/geminiErrors";
 import { pdfPageToImageBase64 } from "../lib/pdfVisionOcr";
-import { buildSummaryFormatterPrompt, buildSummaryPrompt } from "../lib/prompts";
+import { buildSummaryFormatterPrompt, buildSummaryPrompt, buildSummaryPromptCloud } from "../lib/prompts";
+import {
+  extractMarkdownSection,
+  MAX_CLOUD_GENERATION_CONTEXT_CHARS,
+  useSingleShotCloudGeneration,
+} from "../lib/cloudGeneration";
 import { loadLocalProfile } from "../lib/storage";
-import { retrieveTopK } from "../lib/rag";
+import { retrieveTopKDetailed } from "../lib/rag";
+import { GeminiGenerationProgress } from "../components/GeminiGenerationProgress";
+import { summaryStageToProgress } from "../lib/geminiProgress";
 
 pdfjs.GlobalWorkerOptions.workerSrc = pdfWorker;
 
@@ -61,42 +64,6 @@ function normalizeAiMarkdown(raw: string): string {
   return t.trim();
 }
 
-function stageProgress(stage: SummaryStage): number {
-  switch (stage) {
-    case "idle":
-      return 0;
-    case "loading-context":
-      return 15;
-    case "building-prompt":
-      return 35;
-    case "generating-main":
-      return 70;
-    case "generating-short":
-      return 90;
-    case "done":
-      return 100;
-    default:
-      return 0;
-  }
-}
-
-function stageLabel(stage: SummaryStage): string {
-  switch (stage) {
-    case "loading-context":
-      return "Czytam treść materiału…";
-    case "building-prompt":
-      return "Przygotowuję prompt streszczenia…";
-    case "generating-main":
-      return "Generuję pełne streszczenie AI…";
-    case "generating-short":
-      return "Tworzę krótką wersję do szybkiej powtórki…";
-    case "done":
-      return "Gotowe.";
-    default:
-      return "";
-  }
-}
-
 export function Summary() {
   const { id } = useParams<{ id: string }>();
   const profile = loadLocalProfile();
@@ -108,9 +75,11 @@ export function Summary() {
   const [fullS, setFullS] = useState("");
   const [busy, setBusy] = useState(false);
   const [summaryStage, setSummaryStage] = useState<SummaryStage>("idle");
+  const [summaryElapsedSec, setSummaryElapsedSec] = useState(0);
   const [chatIn, setChatIn] = useState("");
   const [chatBusy, setChatBusy] = useState(false);
   const [chatOut, setChatOut] = useState<ChatMessage[]>([]);
+  const [ragProviderMismatch, setRagProviderMismatch] = useState(false);
   const [chatScope, setChatScope] = useState<"all" | "page">("all");
   const [currentPage, setCurrentPage] = useState<number>(1);
   const [maxPage, setMaxPage] = useState<number>(1);
@@ -155,28 +124,55 @@ export function Summary() {
     if (!id || !profile) return;
     setBusy(true);
     setSummaryStage("loading-context");
+    setSummaryElapsedSec(0);
     setShortS("");
     setFullS("");
     try {
-      const context = chunks.map((c) => c.body).join("\n\n").slice(0, 24000);
+      const isCloud = useSingleShotCloudGeneration();
+      const contextLimit = isCloud ? MAX_CLOUD_GENERATION_CONTEXT_CHARS : 24_000;
+      const context = chunks.map((c) => c.body).join("\n\n").slice(0, contextLimit);
       setSummaryStage("building-prompt");
+      const provider = getAiProvider();
+      const model = getActiveModelId(profile);
+
+      if (isCloud) {
+        setSummaryStage("generating-main");
+        const { system, user } = buildSummaryPromptCloud(context);
+        const text = await provider.chat(
+          model,
+          [
+            { role: "system", content: system },
+            { role: "user", content: user },
+          ],
+          { temperature: 0.3, numPredict: 8192 },
+        );
+        const shortFromSection = extractMarkdownSection(text, "Skrót");
+        const shortAsk =
+          shortFromSection ||
+          text.replace(/^#+\s+/gm, "").replace(/\n+/g, " ").trim().slice(0, 400);
+        setFullS(text);
+        setShortS(shortAsk);
+        await upsertSummaryForPresentation(id, shortAsk, text);
+        setSummaryStage("done");
+        return;
+      }
+
       const { system, user } = buildSummaryPrompt(context);
-      const model = MODEL_PROFILES[profile.modelProfile].ollamaTag;
       setSummaryStage("generating-main");
-      const draftText = await ollamaChat(model, [
+      const draftText = await provider.chat(model, [
         { role: "system", content: system },
         { role: "user", content: user },
       ]);
       const { system: fmtSystem, user: fmtUser } = buildSummaryFormatterPrompt(
         draftText.slice(0, 12000),
       );
-      const text = await ollamaChat(model, [
+      const text = await provider.chat(model, [
         { role: "system", content: fmtSystem },
         { role: "user", content: fmtUser },
       ]);
       setFullS(text || draftText);
       setSummaryStage("generating-short");
-      const shortAsk = await ollamaChat(model, [
+      const shortAsk = await provider.chat(model, [
         {
           role: "system",
           content:
@@ -191,7 +187,12 @@ export function Summary() {
       await upsertSummaryForPresentation(id, shortAsk, text || draftText);
       setSummaryStage("done");
     } catch (e) {
-      setFullS(`Błąd: ${e instanceof Error ? e.message : String(e)}`);
+      const errMsg = isGeminiRateLimitError(e)
+        ? e.userMessage
+        : e instanceof Error
+          ? e.message
+          : String(e);
+      setFullS(`Błąd: ${errMsg}`);
     } finally {
       setBusy(false);
       if (summaryStage !== "done") setSummaryStage("idle");
@@ -201,6 +202,20 @@ export function Summary() {
   const canPreviewPdf = Boolean(filePath && sourceKind.toLowerCase() === "pdf");
   const shortSummaryMd = useMemo(() => normalizeAiMarkdown(shortS), [shortS]);
   const fullSummaryMd = useMemo(() => normalizeAiMarkdown(fullS), [fullS]);
+
+  useEffect(() => {
+    if (!busy) return;
+    const t = setInterval(() => {
+      setSummaryElapsedSec((s) => s + 1);
+    }, 1000);
+    return () => clearInterval(t);
+  }, [busy]);
+
+  const summaryProgress = useMemo(
+    () => summaryStageToProgress(summaryStage),
+    [summaryStage],
+  );
+
   useEffect(() => {
     if (!canPreviewPdf || !filePath) {
       setPdfBlobUrl((prev) => {
@@ -305,7 +320,7 @@ export function Summary() {
     setChatElapsed(0);
     setChatIn("");
 
-    const applyDelta = (d: ChatStreamDelta) => {
+    const applyDelta = (d: StreamDelta) => {
       setChatOut((prev) => {
         const copy = [...prev];
         for (let i = copy.length - 1; i >= 0; i--) {
@@ -350,13 +365,16 @@ export function Summary() {
     };
 
     try {
-      const model = MODEL_PROFILES[profile.modelProfile].ollamaTag;
+      const provider = getAiProvider();
+      const model = getActiveModelId(profile);
       let context = "";
       if (chatScope === "page") {
         context = pageContext;
+        setRagProviderMismatch(false);
       } else {
-        const top = await retrieveTopK(q, chunks, 6);
-        context = top.map((c) => c.body).join("\n\n---\n\n");
+        const top = await retrieveTopKDetailed(q, chunks, 6);
+        setRagProviderMismatch(top.providerMismatch);
+        context = top.chunks.map((c) => c.body).join("\n\n---\n\n");
       }
       setChatStatus("Generuję odpowiedź (strumień)…");
       const scopeLabel =
@@ -365,7 +383,7 @@ export function Summary() {
           : "kontekst całego dokumentu";
       const baseSystemPrompt =
         "Jesteś pomocnym asystentem nauki po polsku. Odpowiadaj na podstawie przekazanego kontekstu i nie zmyślaj danych spoza materiału. W tym systemie fragmenty mogą zawierać znaczniki 'Strona N:' — traktuj je jako prawdziwe numery stron i odnoś się do nich dosłownie.";
-      const chatOpts = { temperature: 0.2, num_predict: 4096 };
+      const chatOpts = { temperature: 0.2, numPredict: 4096 };
 
       if (chatScope === "page" && sourceKind.toLowerCase() === "pdf" && filePath) {
         try {
@@ -375,7 +393,7 @@ export function Summary() {
             pageImage = await pdfPageToImageBase64(filePath, currentPage);
             pageImageCacheRef.current.set(currentPage, pageImage);
           }
-          await ollamaChatWithImagesStream(
+          await provider.chatWithImagesStream(
             model,
             [
               {
@@ -410,7 +428,7 @@ export function Summary() {
             }
             return copy;
           });
-          await ollamaChatStream(
+          await provider.chatStream(
             model,
             [
               { role: "system", content: baseSystemPrompt },
@@ -425,7 +443,7 @@ export function Summary() {
           );
         }
       } else {
-        await ollamaChatStream(
+        await provider.chatStream(
           model,
           [
             { role: "system", content: baseSystemPrompt },
@@ -441,7 +459,11 @@ export function Summary() {
       }
       finalizeAiMessage();
     } catch (e) {
-      const errMsg = e instanceof Error ? e.message : String(e);
+      const errMsg = isGeminiRateLimitError(e)
+        ? e.userMessage
+        : e instanceof Error
+          ? e.message
+          : String(e);
       setChatOut((prev) => {
         const copy = [...prev];
         for (let i = copy.length - 1; i >= 0; i--) {
@@ -498,26 +520,17 @@ export function Summary() {
         </button>
       </div>
 
-      {busy && (
-        <section className="rounded-3xl bg-surface-container-lowest p-6 shadow-melon space-y-3">
-          <div className="flex items-center justify-between">
-            <p className="text-sm font-semibold text-on-surface m-0">
-              Generowanie streszczenia
-            </p>
-            <p className="text-sm text-primary font-bold m-0">
-              {stageProgress(summaryStage)}%
-            </p>
-          </div>
-          <div className="h-2 rounded-full bg-surface-container-high overflow-hidden">
-            <div
-              className="h-full rounded-full melon-gradient transition-all duration-300"
-              style={{ width: `${stageProgress(summaryStage)}%` }}
-            />
-          </div>
-          <p className="text-xs text-on-surface-variant m-0">
-            {stageLabel(summaryStage)}
-          </p>
-        </section>
+      {busy && summaryProgress && (
+        <GeminiGenerationProgress
+          progress={summaryProgress}
+          elapsedSec={summaryElapsedSec}
+          title="Generowanie streszczenia"
+          hint={
+            summaryProgress.indeterminate
+              ? "Przy długim materiale generowanie może potrwać chwilę."
+              : undefined
+          }
+        />
       )}
 
       <section className="grid xl:grid-cols-[2.3fr_1fr] gap-5 items-start">
@@ -703,6 +716,14 @@ export function Summary() {
               </button>
             </div>
           </div>
+
+          {ragProviderMismatch && chatScope === "all" && (
+            <p className="text-sm text-primary m-0 rounded-xl bg-surface-container-high px-3 py-2">
+              Ten materiał był indeksowany innym asystentem AI. Przeindeksuj plik w
+              sekcji wgrywania, żeby wyszukiwanie w całym dokumencie działało
+              poprawnie.
+            </p>
+          )}
 
           {chatScope === "page" && (
             <label className="text-xs text-on-surface-variant inline-flex items-center gap-2">

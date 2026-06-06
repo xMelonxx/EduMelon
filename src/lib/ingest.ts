@@ -1,11 +1,13 @@
 import { invoke } from "@tauri-apps/api/core";
 import {
+  deletePresentationWithChunks,
   getSubjectFolder,
   insertChunks,
   insertPresentation,
   type ChunkRow,
 } from "./db";
-import { chunkPlainText, embedText } from "./rag";
+import { chunkPlainText, embedTexts } from "./rag";
+import { getAiProviderId } from "./storage";
 
 type SlideChunk = { slide_index: number; text: string };
 
@@ -107,69 +109,92 @@ export async function ingestFileFromPath(
     raw_text_preview: preview,
   });
 
-  const chunkRows: Omit<ChunkRow, "embedding">[] = [];
+  try {
+    const chunkRows: Omit<ChunkRow, "embedding">[] = [];
 
-  if (kind === "pptx") {
-    for (const s of slideChunks) {
-      chunkRows.push({
-        id: crypto.randomUUID(),
-        presentation_id: presId,
-        slide_index: s.slide_index,
-        body: `Slajd ${s.slide_index}:\n${s.text}`,
-      });
-    }
-  } else {
-    if (slideChunks.length > 0) {
+    if (kind === "pptx") {
       for (const s of slideChunks) {
-        const pageBody = s.text.trim();
-        if (!pageBody) continue;
-        const parts = chunkPlainText(pageBody);
-        if (parts.length === 0) {
-          chunkRows.push({
-            id: crypto.randomUUID(),
-            presentation_id: presId,
-            slide_index: s.slide_index,
-            body: `Strona ${s.slide_index}:\n${pageBody}`,
-          });
-        } else {
-          for (const part of parts) {
+        chunkRows.push({
+          id: crypto.randomUUID(),
+          presentation_id: presId,
+          slide_index: s.slide_index,
+          body: `Slajd ${s.slide_index}:\n${s.text}`,
+        });
+      }
+    } else {
+      if (slideChunks.length > 0) {
+        for (const s of slideChunks) {
+          const pageBody = s.text.trim();
+          if (!pageBody) continue;
+          const parts = chunkPlainText(pageBody);
+          if (parts.length === 0) {
             chunkRows.push({
               id: crypto.randomUUID(),
               presentation_id: presId,
               slide_index: s.slide_index,
-              body: `Strona ${s.slide_index}:\n${part}`,
+              body: `Strona ${s.slide_index}:\n${pageBody}`,
             });
+          } else {
+            for (const part of parts) {
+              chunkRows.push({
+                id: crypto.randomUUID(),
+                presentation_id: presId,
+                slide_index: s.slide_index,
+                body: `Strona ${s.slide_index}:\n${part}`,
+              });
+            }
           }
         }
-      }
-    } else {
-      const parts = chunkPlainText(pdfText);
-      parts.forEach((body, i) => {
-        chunkRows.push({
-          id: crypto.randomUUID(),
-          presentation_id: presId,
-          slide_index: i + 1,
-          body: `Strona ${i + 1}:\n${body}`,
+      } else {
+        const parts = chunkPlainText(pdfText);
+        parts.forEach((body, i) => {
+          chunkRows.push({
+            id: crypto.randomUUID(),
+            presentation_id: presId,
+            slide_index: i + 1,
+            body: `Strona ${i + 1}:\n${body}`,
+          });
         });
-      });
+      }
     }
-  }
 
-  report("Tworzę embeddingi lokalnie (Ollama)…", 50);
-  const withEmb: ChunkRow[] = [];
-  const total = Math.max(1, chunkRows.length);
-  for (const c of chunkRows) {
-    const emb = await embedText(c.body);
-    withEmb.push({
-      ...c,
-      embedding: JSON.stringify(emb),
+    if (chunkRows.length === 0) {
+      throw new Error(
+        "Nie udało się przygotować fragmentów tekstu do indeksu. Sprawdź, czy plik ma warstwę tekstową.",
+      );
+    }
+
+    const provider = getAiProviderId();
+    const embedLabel =
+      provider === "gemini"
+        ? "Indeksuję treść (Gemini)…"
+        : "Tworzę embeddingi lokalnie (Ollama)…";
+    report(embedLabel, 50);
+
+    const bodies = chunkRows.map((c) => c.body);
+    const embeddings = await embedTexts(bodies, (done, total) => {
+      const pct = 50 + Math.round((done / Math.max(1, total)) * 45);
+      report(`Indeks: ${done}/${total}`, pct);
     });
-    const pct = 50 + Math.round((withEmb.length / total) * 45);
-    report(`Embeddingi: ${withEmb.length}/${total}`, pct);
-  }
 
-  report("Zapisuję fragmenty w bazie…", 97);
-  await insertChunks(withEmb);
-  report("Gotowe.", 100);
-  return presId;
+    if (embeddings.length !== chunkRows.length) {
+      throw new Error(
+        `Indeksowanie przerwane: oczekiwano ${chunkRows.length} wektorów, otrzymano ${embeddings.length}.`,
+      );
+    }
+
+    const withEmb: ChunkRow[] = chunkRows.map((c, i) => ({
+      ...c,
+      embedding: JSON.stringify(embeddings[i]),
+      embedding_provider: provider,
+    }));
+
+    report("Zapisuję fragmenty w bazie…", 97);
+    await insertChunks(withEmb);
+    report("Gotowe.", 100);
+    return presId;
+  } catch (e) {
+    await deletePresentationWithChunks(presId).catch(() => undefined);
+    throw e;
+  }
 }

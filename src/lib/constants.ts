@@ -26,3 +26,15 @@ export const MODEL_PROFILES: Record<
 /** Embedding model for RAG (pull separately in Ollama). */
 export const EMBEDDING_MODEL =
   import.meta.env.VITE_OLLAMA_EMBEDDING_MODEL ?? "nomic-embed-text:latest";
+
+export type AiProviderId = "ollama" | "gemini";
+
+export const GEMINI_EMBEDDING_MODEL =
+  import.meta.env.VITE_GEMINI_EMBEDDING_MODEL ?? "text-embedding-004";
+
+export const GEMINI_CHAT_MODEL =
+  import.meta.env.VITE_GEMINI_CHAT_MODEL ?? "gemini-3.5-flash";
+
+/** @deprecated Użyj getGeminiChatModelId() z geminiModels.ts */
+export const GEMINI_DAILY_REQUEST_LIMIT =
+  Number(import.meta.env.VITE_GEMINI_DAILY_REQUEST_LIMIT) || 1500;

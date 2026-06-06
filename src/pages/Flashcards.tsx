@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import type { FlashcardGenProgress } from "../lib/flashcardsOllama";
+import { GeminiGenerationProgress } from "../components/GeminiGenerationProgress";
 import { Link, useParams } from "react-router-dom";
 import {
   getPresentation,
@@ -9,7 +10,7 @@ import {
   deleteFlashcardsForPresentation,
   updateFlashcardProgress,
 } from "../lib/db";
-import { MODEL_PROFILES } from "../lib/constants";
+import { getActiveModelId } from "../lib/ai/aiManager";
 import { generateFlashcardsFromMaterial } from "../lib/flashcardsOllama";
 import {
   ocrPdfPagesWithVision,
@@ -117,7 +118,7 @@ export function Flashcards() {
     setGenProgress({ label: "Ładuję fragmenty materiału…", percent: 1 });
     try {
       const chunks = await listChunksForPresentation(id);
-      const model = MODEL_PROFILES[profile.modelProfile].ollamaTag;
+      const model = getActiveModelId(profile);
       let effectiveChunks = chunks;
       if (sourceKind.toLowerCase() === "pdf" && filePath) {
         const pagesToOcr = chunks
@@ -335,33 +336,12 @@ export function Flashcards() {
         )}
 
         {genProgress && (
-          <div
-            className="rounded-3xl border border-primary/25 bg-surface-container-low/90 p-4 md:p-5 shadow-inner space-y-3"
-            role="status"
-            aria-live="polite"
-          >
-            <div className="flex flex-wrap items-center justify-between gap-2 text-sm">
-              <p className="text-on-surface font-semibold leading-snug m-0">
-                {genProgress.label}
-              </p>
-              <span className="tabular-nums text-on-surface-variant font-medium">
-                {genElapsedSec}s
-              </span>
-            </div>
-            <div className="h-2.5 w-full rounded-full bg-surface-container-high overflow-hidden">
-              <div
-                className="h-full rounded-full bg-gradient-to-r from-secondary to-primary transition-[width] duration-300 ease-out"
-                style={{
-                  width: `${Math.min(100, Math.max(0, genProgress.percent))}%`,
-                }}
-              />
-            </div>
-            <p className="text-xs text-on-surface-variant m-0">
-              Przy więcej niż 10 fiszkach materiał jest dzielony na części (ok. 10
-              kart na fragment PDF) — krótsze przebiegi zamiast jednej bardzo długiej
-              odpowiedzi. Ollama nadal może potrzebować kilku minut na duży plik.
-            </p>
-          </div>
+          <GeminiGenerationProgress
+            progress={genProgress}
+            elapsedSec={genElapsedSec}
+            title="Generowanie fiszek"
+            hint="Przy więcej niż 10 fiszkach materiał jest dzielony na części — krótsze przebiegi zamiast jednej bardzo długiej odpowiedzi."
+          />
         )}
       </div>
 

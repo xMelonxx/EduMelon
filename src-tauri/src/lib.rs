@@ -1,4 +1,6 @@
 mod commands;
+mod gemini;
+mod gemini_store;
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
@@ -9,6 +11,7 @@ pub fn run() {
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_process::init())
         .plugin(tauri_plugin_updater::Builder::new().build())
+        .plugin(tauri_plugin_store::Builder::default().build())
         .invoke_handler(tauri::generate_handler![
             commands::extract_pdf_text,
             commands::extract_pdf_pages_text,
@@ -28,6 +31,16 @@ pub fn run() {
             commands::diagnose_ollama,
             commands::get_system_specs,
             commands::cleanup_stale_update_temp_files,
+            gemini::save_gemini_key,
+            gemini::has_gemini_key,
+            gemini::delete_gemini_key,
+            gemini::test_gemini_key,
+            gemini::gemini_generate_content,
+            gemini::gemini_generate_content_with_images,
+            gemini::gemini_generate_content_with_pdf,
+            gemini::gemini_embed_content,
+            gemini::gemini_batch_embed_content,
+            gemini::gemini_stream_generate_content,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

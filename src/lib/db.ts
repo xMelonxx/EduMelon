@@ -55,9 +55,13 @@ async function migrate(db: Database): Promise<void> {
       slide_index INTEGER,
       body TEXT NOT NULL,
       embedding TEXT,
+      embedding_provider TEXT,
       FOREIGN KEY (presentation_id) REFERENCES presentations(id) ON DELETE CASCADE
     );
   `);
+  if (!(await tableHasColumn(db, "chunks", "embedding_provider"))) {
+    await db.execute(`ALTER TABLE chunks ADD COLUMN embedding_provider TEXT`);
+  }
   await db.execute(`
     CREATE TABLE IF NOT EXISTS flashcards (
       id TEXT PRIMARY KEY,
@@ -329,6 +333,12 @@ export async function insertPresentation(
   return id;
 }
 
+export async function deletePresentationWithChunks(id: string): Promise<void> {
+  const db = await getDb();
+  await db.execute(`DELETE FROM chunks WHERE presentation_id = $1`, [id]);
+  await db.execute(`DELETE FROM presentations WHERE id = $1`, [id]);
+}
+
 export async function listSubjectFolders(): Promise<SubjectFolderRow[]> {
   const db = await getDb();
   return db.select<SubjectFolderRow[]>(
@@ -394,20 +404,22 @@ export type ChunkRow = {
   slide_index: number | null;
   body: string;
   embedding: string | null;
+  embedding_provider?: string | null;
 };
 
 export async function insertChunks(chunks: ChunkRow[]): Promise<void> {
   const db = await getDb();
   for (const c of chunks) {
     await db.execute(
-      `INSERT INTO chunks (id, presentation_id, slide_index, body, embedding)
-       VALUES ($1, $2, $3, $4, $5)`,
+      `INSERT INTO chunks (id, presentation_id, slide_index, body, embedding, embedding_provider)
+       VALUES ($1, $2, $3, $4, $5, $6)`,
       [
         c.id,
         c.presentation_id,
         c.slide_index,
         c.body,
         c.embedding,
+        c.embedding_provider ?? null,
       ],
     );
   }
@@ -418,7 +430,7 @@ export async function listChunksForPresentation(
 ): Promise<ChunkRow[]> {
   const db = await getDb();
   return db.select<ChunkRow[]>(
-    `SELECT id, presentation_id, slide_index, body, embedding FROM chunks
+    `SELECT id, presentation_id, slide_index, body, embedding, embedding_provider FROM chunks
      WHERE presentation_id = $1 ORDER BY (slide_index IS NULL), slide_index ASC, id ASC`,
     [presentationId],
   );

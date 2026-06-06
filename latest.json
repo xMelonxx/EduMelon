@@ -1,11 +1,11 @@
 {
-  "version": "0.1.12",
-  "notes": "## 🚀 EduMelon v0.1.12\n\nData: 2026-05-08\n\n## ✨ Nowe\n- Testy są bardziej egzaminowe i częściej sprawdzają rozumienie, a nie tylko pamięć.\n- W narzędziach DEV przy generowaniu testów widzisz czytelniejsze podsumowanie jakości i powodów odrzuceń.\n\n## 🛠 Poprawki i zmiany\n- Stabilniejsze domykanie docelowej liczby pytań, także gdy model po drodze gubi część wyników.\n- Mniej sytuacji, w których generowanie kończy się bez użytecznego zestawu pytań.\n- Lepsze komunikaty, gdy problem wynika z czasu odpowiedzi modelu lub połączenia.\n\n## ⬆️ Jak zaktualizować\n- Ustawienia → Aktualizacje aplikacji → Sprawdź aktualizacje → Pobierz → Uruchom ponownie i zaktualizuj.\n",
-  "pub_date": "2026-05-08T18:31:34Z",
+  "version": "0.1.13",
+  "notes": "## 🚀 EduMelon v0.1.13\n\nData: 2026-06-06\n\n## ✨ Nowe\n- **Gemini (chmura):** możesz korzystać z Google Gemini zamiast lokalnej Ollamy — wystarczy klucz API z Google AI Studio (onboarding lub Ustawienia).\n- **Wybór silnika AI:** przełącznik Ollama / Gemini oraz wybór modelu kartami — w Ustawieniach i przy pierwszej konfiguracji.\n- **Testy — poziom trudności:** łagodny, standardowy, trudny i egzaminacyjny; wybór przy generowaniu i przy ponownym tworzeniu testu.\n- **Postęp generowania (Gemini):** checklista kroków, animowany pasek, licznik czasu i zmieniające się komunikaty — przy testach, fiszkach i streszczeniu.\n- **Gemini — zużycie:** wskaźnik dziennego limitu zapytań per model (w Ustawieniach).\n\n## 🛠 Poprawki i zmiany\n- **Testy (Gemini):** gdy generowanie się nie uda, komunikat mówi ile pytań model zwrócił i dlaczego zostały odrzucone — zamiast ogólnego „spróbuj ponownie”.\n- **Testy / fiszki / streszczenie (Gemini):** szybsze generowanie jednym zapytaniem z całego materiału (PDF analizowany wizualnie).\n- **Czat z materiałem:** lepsze dopasowanie do wybranego silnika AI (Ollama lub Gemini).\n- **Stabilność:** obsługa limitów zapytań Gemini (HTTP 429) z czytelnym komunikatem.\n\n## ⬆️ Jak zaktualizować\n- Ustawienia → Aktualizacje aplikacji → Sprawdź aktualizacje → Pobierz → Uruchom ponownie i zaktualizuj.\n",
+  "pub_date": "2026-06-06T20:28:48Z",
   "platforms": {
     "windows-x86_64": {
-      "signature": "dW50cnVzdGVkIGNvbW1lbnQ6IHNpZ25hdHVyZSBmcm9tIHRhdXJpIHNlY3JldCBrZXkKUlVTZEc3c0RCMVVta2ZIMWljenFRVXNjMWYybGZhK3ZWUiswdnZsMnVMZG9yK21KRTRuSDZ2R21PbmMwSTJPWU4rbWNNbFYvRU5xT1hPT0IwdE9xU3k2RTFQbjJDaXhod1FzPQp0cnVzdGVkIGNvbW1lbnQ6IHRpbWVzdGFtcDoxNzc4MjY1MDMyCWZpbGU6RWR1TWVsb25fMC4xLjEyX3g2NC1zZXR1cC5leGUKT3lPMDkrYW5sRC9kV1IrOUVETnBYRmxDSkVGWk5VL1dRNC9IQ1hEODlucXhLcDZPRmw0ZE5HajRKYjdFV09xc1JPSkZIZ0hvTGxscUUyVkRZZndMQkE9PQo=",
-      "url": "https://github.com/xMelonxx/EduMelon/releases/download/v0.1.12/EduMelon_0.1.12_x64-setup.exe"
+      "signature": "dW50cnVzdGVkIGNvbW1lbnQ6IHNpZ25hdHVyZSBmcm9tIHRhdXJpIHNlY3JldCBrZXkKUlVTZEc3c0RCMVVta1lrNVh5SVdES3pHZC9Pdmtrb2Z5d25LUFRsMTRJZEJFbm9vaTA2U3R3d0U3eUNwaGZxWjlaNzJsd2ZCVjBZMFNqU2ZhNWhuZGxOVnJHUXFWVWtXOVFnPQp0cnVzdGVkIGNvbW1lbnQ6IHRpbWVzdGFtcDoxNzgwNzc2OTI0CWZpbGU6RWR1TWVsb25fMC4xLjEzX3g2NC1zZXR1cC5leGUKTlJLN0MyWlhtVGcyTlJJLzBELy9uZGppbUtZY3N3cGk5RC9nQjhka0xsT0JIWGdKMHdOZmlWbkMvZklIQ2psRjBkVFltb01RZDVIdjF5YU9kWXJ3QlE9PQo=",
+      "url": "https://github.com/xMelonxx/EduMelon/releases/download/v0.1.13/EduMelon_0.1.13_x64-setup.exe"
     }
   }
 }

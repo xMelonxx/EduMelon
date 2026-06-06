@@ -1,7 +1,7 @@
 import { invoke } from "@tauri-apps/api/core";
 import { pdfjs } from "react-pdf";
 import pdfWorker from "pdfjs-dist/build/pdf.worker.min.mjs?url";
-import { ollamaChatWithImages } from "./ollama";
+import { getAiProvider } from "./ai/aiManager";
 
 pdfjs.GlobalWorkerOptions.workerSrc = pdfWorker;
 
@@ -198,7 +198,7 @@ export async function ocrPdfPagesWithVision(
       options?.renderOptions,
     );
     const text = await withTimeout(
-      ollamaChatWithImages(
+      getAiProvider().chatWithImages(
         model,
         [
           {
@@ -215,7 +215,7 @@ export async function ocrPdfPagesWithVision(
         ],
         {
           temperature: 0.0,
-          num_predict: 2048,
+          numPredict: 2048,
         },
       ),
       perPageTimeoutMs,

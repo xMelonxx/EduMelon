@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 import { CreateStudyEventModal } from "../components/CreateStudyEventModal";
 import { CreateFolderModal } from "../components/CreateFolderModal";
-import { MODEL_PROFILES } from "../lib/constants";
+import { getActiveModelId, getAiProvider } from "../lib/ai/aiManager";
 import { isDevToolsEnabled } from "../lib/devtools";
 import {
   createStudyEvent,
@@ -31,7 +31,6 @@ import {
   type WeakTopicRow,
   type WeeklyProgressStats,
 } from "../lib/db";
-import { ollamaChat } from "../lib/ollama";
 import { loadLocalProfile } from "../lib/storage";
 
 type FolderBucket = {
@@ -217,7 +216,8 @@ export function Dashboard() {
       setAiRecoBusy(true);
       setAiRecommendation((prev) => prev || fallbackRecommendation);
       try {
-        const model = MODEL_PROFILES[profile?.modelProfile ?? "e2b-it"].ollamaTag;
+        const model = getActiveModelId(profile);
+        const provider = getAiProvider();
         const context = {
           todayTasks,
           weeklyStats,
@@ -235,7 +235,7 @@ export function Dashboard() {
           remindersCount: reminders.length,
         };
         const raw = await Promise.race<string>([
-          ollamaChat(
+          provider.chat(
             model,
             [
               {
@@ -248,7 +248,7 @@ export function Dashboard() {
                 content: `Kontekst ucznia (JSON): ${JSON.stringify(context)}`,
               },
             ],
-            { temperature: 0.2, num_predict: 80 },
+            { temperature: 0.2, numPredict: 80 },
           ),
           new Promise<string>((_, reject) =>
             setTimeout(() => reject(new Error("AI recommendation timeout")), 15000),

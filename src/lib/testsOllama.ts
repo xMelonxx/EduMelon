@@ -1,24 +1,41 @@
 import type { ChunkRow } from "./db";
 import {
-  ollamaChat,
-  ollamaChatStream,
-  ollamaChatWithImages,
-  ollamaChatWithImagesStream,
-  type ChatStreamDelta,
-  type OllamaImageMessage,
-} from "./ollama";
+  geminiBatchDelayMs,
+  getAiProvider,
+  getGeminiProvider,
+  sleep,
+} from "./ai/aiManager";
+import type { AiOptions, ImageChatMessage, StreamDelta } from "./ai/types";
+import { useSingleShotCloudGeneration } from "./cloudGeneration";
+import {
+  buildFullTestMaterialContext,
+  filterChunksByPageRange,
+  geminiTestNumPredict,
+} from "./cloudTestContext";
+import { buildTestsGeminiPdfPrompt, buildTestsGeminiPrompt } from "./prompts";
+import {
+  DEFAULT_TEST_DIFFICULTY,
+  getTestDifficultyAdjective,
+  getTestDifficultyBlueprint,
+  getTestDifficultyOllamaChunkRules,
+  getTestDifficultyOllamaSystem,
+  type TestDifficulty,
+} from "./testDifficulty";
 import {
   pdfGetPageCount,
   pdfPageToImageBase64,
   PDF_PAGE_IMAGE_LOW_SPEC_OPTIONS,
   PDF_PAGE_IMAGE_TEST_VISION_OPTIONS,
 } from "./pdfVisionOcr";
+import {
+  formatTestGenerationFailureMessage,
+  GEMINI_TEST_PROGRESS_STEPS,
+  runWithGeminiWaitProgress,
+  type AiGenerationProgress,
+} from "./geminiProgress";
 import { getLowSpecTestModeEnabled } from "./storage";
 
-export type TestGenProgress = {
-  label: string;
-  percent: number;
-};
+export type TestGenProgress = AiGenerationProgress;
 
 export type GeneratedTestQuestion = {
   slide_index: number | null;
@@ -47,6 +64,8 @@ export type TestGenerationOptions = {
   devPageRange?: { start: number; end: number };
   /** DEV: log linii do konsoli w UI (np. Tests.tsx). */
   onDevLog?: (line: string) => void;
+  /** Poziom trudności pytań testowych. */
+  difficulty?: TestDifficulty;
 };
 
 export type TestGenerationRejectReasons = {
@@ -83,6 +102,7 @@ export type TestGenerationMetrics = {
   visionCalls: number;
   totalLatencyMs: number;
   rejectReasons: TestGenerationRejectReasons;
+  difficulty: TestDifficulty;
 };
 
 export type TestGenerationResult = {
@@ -307,8 +327,15 @@ function parseQuestions(
     if (validCrop && cropW > 0 && cropH > 0) {
       requiresImageFlag = 1;
     }
+    const slideRaw = r.slide_index ?? r.page ?? r.page_number;
+    let slideIndex: number | null = page;
+    if (typeof slideRaw === "number" && Number.isFinite(slideRaw)) {
+      slideIndex = slideRaw;
+    } else if (typeof slideRaw === "string" && /^\d+$/.test(slideRaw.trim())) {
+      slideIndex = parseInt(slideRaw.trim(), 10);
+    }
     out.push({
-      slide_index: page,
+      slide_index: slideIndex,
       question,
       option_a: optionA,
       option_b: optionB,
@@ -392,8 +419,11 @@ function scoreQuestionQuality(
     .toLowerCase()
     .split(/\s+/)
     .filter((t) => t.length >= 5);
-  const aligned = qTokens.some((t) => ctx.includes(t));
-  if (aligned || q.requires_image === 1) score += 1;
+  const aligned =
+    ctx.length === 0 ||
+    qTokens.some((t) => ctx.includes(t)) ||
+    q.requires_image === 1;
+  if (aligned) score += 1;
   else failed.push("source_alignment");
 
   // 4) non_triviality
@@ -482,41 +512,43 @@ async function withTimeout<T>(
   });
 }
 
-/** Przy `onDevLog` używamy strumienia — w konsoli DEV widać 💭 thinking z modeli, które je zwracają. */
 async function runOllamaJsonChatForTests(
   model: string,
   options: TestGenerationOptions | undefined,
   numPredict: number,
   timeoutMs: number,
   timeoutLabel: string,
-  visionMessages: OllamaImageMessage[] | null,
+  visionMessages: ImageChatMessage[] | null,
   textMessages: { role: string; content: string }[],
 ): Promise<string> {
-  const opts = {
-    format: "json" as const,
+  const opts: AiOptions = {
+    format: "json",
     temperature: 0.3,
-    num_predict: numPredict,
-    /** Ollama: wyłącza osobne pole thinking — szybciej do treści JSON (DEV stream i zwykły chat). */
-    think: false as const,
+    numPredict,
+    think: false,
   };
 
+  if (!useSingleShotCloudGeneration()) {
+    await sleep(geminiBatchDelayMs());
+  }
+
   if (!options?.onDevLog) {
+    const provider = getAiProvider();
     if (visionMessages) {
       return await withTimeout(
-        ollamaChatWithImages(model, visionMessages, opts),
+        provider.chatWithImages(model, visionMessages, opts),
         timeoutMs,
         timeoutLabel,
       );
     }
     return await withTimeout(
-      ollamaChat(model, textMessages, opts),
+      provider.chat(model, textMessages, opts),
       timeoutMs,
       timeoutLabel,
     );
   }
 
   let raw = "";
-  /** Delty thinking składamy — jeden wpis 💭 w konsoli zamiast osobnej linii na każde słowo. */
   let thinkingAcc = "";
   const flushThinking = () => {
     const t = thinkingAcc.trim();
@@ -525,7 +557,7 @@ async function runOllamaJsonChatForTests(
       thinkingAcc = "";
     }
   };
-  const onDelta = (d: ChatStreamDelta) => {
+  const onDelta = (d: StreamDelta) => {
     if (d.kind === "thinking") {
       thinkingAcc += d.delta;
       return;
@@ -534,10 +566,11 @@ async function runOllamaJsonChatForTests(
     raw += d.delta;
   };
 
+  const provider = getAiProvider();
   await withTimeout(
     visionMessages
-      ? ollamaChatWithImagesStream(model, visionMessages, opts, onDelta)
-      : ollamaChatStream(model, textMessages, opts, onDelta),
+      ? provider.chatWithImagesStream(model, visionMessages, opts, onDelta)
+      : provider.chatStream(model, textMessages, opts, onDelta),
     timeoutMs,
     timeoutLabel,
   );
@@ -827,15 +860,238 @@ ${chunkContext}
   return out;
 }
 
+async function generateTestsGeminiSingleShot(
+  model: string,
+  chunks: ChunkRow[],
+  onProgress?: (p: TestGenProgress) => void,
+  options?: TestGenerationOptions,
+): Promise<TestGenerationResult> {
+  const targetRange = computeQuestionTargetRange(
+    options?.finalQuestionLimit ?? DEFAULT_FINAL_QUESTION_LIMIT,
+  );
+  const targetCount = targetRange.min;
+  const difficulty = options?.difficulty ?? DEFAULT_TEST_DIFFICULTY;
+
+  const isPdf =
+    options?.sourceKind?.toLowerCase() === "pdf" && !!options.filePath?.trim();
+  let raw: string;
+  let contextForQuality = "";
+  let chunkCount = 0;
+  let pageRangeLabel: string;
+  const startedAt = Date.now();
+
+  if (isPdf && options.filePath) {
+    onProgress?.({
+      label: "Wysyłam PDF do analizy (tekst + wykresy)…",
+      percent: 12,
+      stepIndex: 1,
+      steps: GEMINI_TEST_PROGRESS_STEPS,
+    });
+    const { system, user } = buildTestsGeminiPdfPrompt(
+      targetCount,
+      options.devPageRange,
+      difficulty,
+    );
+    options?.onDevLog?.(`Gemini test: PDF ${options.filePath}`);
+    raw = await runWithGeminiWaitProgress(
+      onProgress,
+      {
+        label: `Gemini analizuje PDF i tworzy ${targetCount} pytań…`,
+        percent: 28,
+        stepIndex: 2,
+        steps: GEMINI_TEST_PROGRESS_STEPS,
+      },
+      () =>
+        withTimeout(
+          getGeminiProvider().chatWithPdf(
+            model,
+            system,
+            user,
+            options.filePath!,
+            {
+              format: "json",
+              temperature: 0.32,
+              numPredict: geminiTestNumPredict(targetCount),
+              think: false,
+            },
+          ),
+          600_000,
+          "Generowanie testu z PDF (Gemini)",
+        ),
+      { messageKind: "tests" },
+    );
+    chunkCount = chunks.length;
+    pageRangeLabel = options.devPageRange
+      ? `PDF str. ${Math.min(options.devPageRange.start, options.devPageRange.end)}–${Math.max(options.devPageRange.start, options.devPageRange.end)}`
+      : "PDF (analiza wizualna)";
+  } else {
+    onProgress?.({
+      label: "Przygotowuję pełny materiał tekstowy…",
+      percent: 8,
+      stepIndex: 0,
+      steps: GEMINI_TEST_PROGRESS_STEPS,
+    });
+    const scoped = filterChunksByPageRange(chunks, options?.devPageRange);
+    const built = buildFullTestMaterialContext(scoped, options?.devPageRange);
+    contextForQuality = built.context;
+    chunkCount = built.chunkCount;
+
+    if (!built.context.trim()) {
+      throw new Error(
+        isPdf
+          ? "Brak ścieżki do pliku PDF."
+          : "Brak treści do wygenerowania testu. Dla PPTX używamy warstwy tekstowej slajdów.",
+      );
+    }
+
+    options?.onDevLog?.(
+      `Gemini test: tekst, ${built.chunkCount} fragmentów, ${built.charCount} znaków` +
+        (built.truncated ? " (obcięty)" : ""),
+    );
+
+    onProgress?.({
+      label: `Przygotowuję zapytanie o ${targetCount} pytań…`,
+      percent: 16,
+      stepIndex: 1,
+      steps: GEMINI_TEST_PROGRESS_STEPS,
+    });
+
+    const { system, user } = buildTestsGeminiPrompt(
+      built.context,
+      targetCount,
+      difficulty,
+    );
+    raw = await runWithGeminiWaitProgress(
+      onProgress,
+      {
+        label: `Gemini tworzy ${targetCount} pytań z materiału…`,
+        percent: 28,
+        stepIndex: 2,
+        steps: GEMINI_TEST_PROGRESS_STEPS,
+      },
+      () =>
+        withTimeout(
+          getAiProvider().chat(
+            model,
+            [
+              { role: "system", content: system },
+              { role: "user", content: user },
+            ],
+            {
+              format: "json",
+              temperature: 0.32,
+              numPredict: geminiTestNumPredict(targetCount),
+              think: false,
+            },
+          ),
+          300_000,
+          "Generowanie testu (Gemini)",
+        ),
+      { messageKind: "tests" },
+    );
+    pageRangeLabel = built.truncated
+      ? `tekst (obcięty, ${built.chunkCount} fragm.)`
+      : "tekst (pełny materiał)";
+  }
+
+  const latencyMs = Date.now() - startedAt;
+
+  onProgress?.({
+    label: "Przetwarzam pytania…",
+    percent: 85,
+    stepIndex: 3,
+    steps: GEMINI_TEST_PROGRESS_STEPS,
+  });
+
+  const parsed = parseQuestions(raw, null);
+  const rejectReasons = buildEmptyRejectReasons();
+  rejectReasons.invalid_shape += parsed.rejects.invalid_shape;
+  rejectReasons.duplicate_options += parsed.rejects.duplicate_options;
+  rejectReasons.invalid_json += parsed.rejects.invalid_json;
+
+  const qualityKept: GeneratedTestQuestion[] = [];
+  let totalQualityScore = 0;
+  for (const q of parsed.questions) {
+    const quality = scoreQuestionQuality(q, contextForQuality);
+    totalQualityScore += quality.score;
+    if (quality.score < QUALITY_GATE_MIN_SCORE) {
+      rejectReasons.quality_gate += 1;
+      continue;
+    }
+    qualityKept.push(q);
+  }
+
+  const dedupeResult = dedupeQuestions(qualityKept);
+  rejectReasons.duplicate_question += dedupeResult.removed;
+  let questions = dedupeResult.deduped.slice(0, targetRange.max);
+
+  if (questions.length === 0) {
+    const failureMsg = formatTestGenerationFailureMessage({
+      targetCount,
+      parsedCount: parsed.questions.length,
+      afterQualityCount: qualityKept.length,
+      finalCount: questions.length,
+      rejectReasons,
+    });
+    options?.onDevLog?.(
+      `Gemini test — odrzucono cały wynik: parsed=${parsed.questions.length}, quality=${qualityKept.length}, deduped=${dedupeResult.deduped.length}, target=${targetCount}, rawLen=${raw.trim().length}, rejects=${JSON.stringify(rejectReasons)}`,
+    );
+    throw new Error(failureMsg);
+  }
+
+  onProgress?.({
+    label: "Test gotowy.",
+    percent: 99,
+    stepIndex: 3,
+    steps: GEMINI_TEST_PROGRESS_STEPS,
+  });
+
+  return {
+    questions,
+    metrics: {
+      model,
+      isLowSpec: false,
+      generationMode: "smart_chunking",
+      chunkCount,
+      pageRanges: [pageRangeLabel],
+      targetQuestionLimit: targetRange.min,
+      targetQuestionMax: targetRange.max,
+      minimumSatisfied: questions.length >= targetRange.min,
+      plannedPerChunk: targetCount,
+      generatedPreOptimizer: parsed.questions.length,
+      generatedPostOptimizer: questions.length,
+      fallbackUsed: questions.length < targetRange.min,
+      optimizerApplied: false,
+      optimizerDropCount: Math.max(0, parsed.questions.length - questions.length),
+      pagesTotal: chunks.length,
+      pagesWithAnyParsed: questions.length > 0 ? 1 : 0,
+      questionsBeforeDedupe: parsed.questions.length,
+      questionsAfterDedupe: questions.length,
+      qualityAverage:
+        qualityKept.length > 0 ? totalQualityScore / qualityKept.length : 0,
+      textCalls: 1,
+      visionCalls: isPdf ? 1 : 0,
+      totalLatencyMs: latencyMs,
+      rejectReasons,
+      difficulty,
+    },
+  };
+}
+
 export async function generateTestQuestionsFromChunks(
   model: string,
   chunks: ChunkRow[],
   onProgress?: (p: TestGenProgress) => void,
   options?: TestGenerationOptions,
 ): Promise<TestGenerationResult> {
+  if (useSingleShotCloudGeneration()) {
+    return generateTestsGeminiSingleShot(model, chunks, onProgress, options);
+  }
+
   const devLog = (msg: string) => {
     options?.onDevLog?.(msg);
   };
+  const difficulty = options?.difficulty ?? DEFAULT_TEST_DIFFICULTY;
   const perf = getTestPerfProfile();
   const sourcePagesRaw = await buildSourcePagesFromChunks(
     chunks,
@@ -867,7 +1123,7 @@ export async function generateTestQuestionsFromChunks(
       : buildSmartChunks(sourcePages);
 
   devLog(
-    `Start: model=${model}, mode=${generationMode}, lowSpec=${getLowSpecTestModeEnabled()}, paczek=${chunksToProcess.length}, próby/paczka=${perf.attempts}`,
+    `Start: model=${model}, mode=${generationMode}, trudność=${difficulty}, lowSpec=${getLowSpecTestModeEnabled()}, paczek=${chunksToProcess.length}, próby/paczka=${perf.attempts}`,
   );
   const idxPreview =
     chunksToProcess.length <= 24
@@ -917,8 +1173,7 @@ export async function generateTestQuestionsFromChunks(
       `--- Paczka ${chunk.pageRange} [${i + 1}/${chunksToProcess.length}] | ctxLen=${chunk.context.length} | visionNotes=${chunk.visionNotes.length} | cel=${target} pytań`,
     );
 
-    const system =
-      "Jesteś akademickim twórcą pytań egzaminacyjnych. Twoim celem jest poziom trudności Medical Board Exam. Skup się na mechanizmach, diagnostyce różnicowej i skutkach klinicznych. Dystraktory muszą być medycznie poprawne w innym kontekście. Wymagaj syntezy wiedzy z całego fragmentu (Cross-page reasoning). Unikaj pytań o proste definicje. Zwracasz WYŁĄCZNIE tablicę JSON.";
+    const system = getTestDifficultyOllamaSystem(difficulty);
 
     const jsonAndRules = `Format JSON:
 [
@@ -941,8 +1196,7 @@ export async function generateTestQuestionsFromChunks(
 Zasady:
 - każde pytanie dotyczy INNEGO faktu z paczki slajdów;
 - tylko jedna poprawna odpowiedź;
-- pytanie ma sprawdzać mechanizm, różnicowanie albo skutek kliniczny;
-- wymagaj cross-page reasoning (łączenie min. 2 faktów z paczki);
+${getTestDifficultyOllamaChunkRules(difficulty)}
 - unikaj "wszystkie powyższe" i "żadne z powyższych";
 - jeśli pytanie dotyczy grafiki/diagramu/wykresu/tabeli, ustaw requires_image=true i podaj kadr (crop_x/y/w/h) tego elementu w procentach strony;
 - jeśli pytanie nie dotyczy grafiki, ustaw requires_image=false i zostaw crop_* jako 0;
@@ -960,31 +1214,32 @@ Zasady:
     const primaryArchetype = QUESTION_ARCHETYPES[i % QUESTION_ARCHETYPES.length];
     const secondaryArchetype =
       QUESTION_ARCHETYPES[(i + 1) % QUESTION_ARCHETYPES.length];
-    const benchmarkGuidance = `Difficulty Blueprint:
-- poziom trudności pytań: 3-4/5 (egzaminowy, nie trywialny recall),
-- archetyp pytania #1: ${primaryArchetype},
-- archetyp pytania #2: ${secondaryArchetype},
-- co najmniej jedno pytanie ma wymagać powiązania 2+ faktów z kontekstu strony.`;
+    const benchmarkGuidance = getTestDifficultyBlueprint(difficulty, target);
+    const questionAdj = getTestDifficultyAdjective(difficulty);
     const useVision = chunk.visionNotes.length > 0;
 
     const user = useVision
-      ? `Przeanalizuj paczkę slajdów (${chunk.pageRange}). Wygeneruj DOKŁADNIE ${target} trudne pytania ABCD w formacie JSON. Pytania muszą łączyć fakty z różnych części fragmentu.
+      ? `Przeanalizuj paczkę slajdów (${chunk.pageRange}). Wygeneruj DOKŁADNIE ${target} ${questionAdj} pytań ABCD w formacie JSON. Pytania muszą łączyć fakty z różnych części fragmentu.
 
 ${jsonAndRules}
 
 ${negativeGuidance}
 ${benchmarkGuidance}
+- archetyp pytania #1: ${primaryArchetype},
+- archetyp pytania #2: ${secondaryArchetype},
 
 KONTEKST (obrazy + notatki wizji):
 ---
 ${chunk.context.slice(0, MAX_PAGE_CONTEXT_CHARS_TEXT).trim()}
 ---`
-      : `Przeanalizuj poniższą paczkę slajdów (${chunk.pageRange}). Wygeneruj DOKŁADNIE ${target} trudne pytania ABCD w formacie JSON. Pytania muszą łączyć fakty z różnych części tego fragmentu.
+      : `Przeanalizuj poniższą paczkę slajdów (${chunk.pageRange}). Wygeneruj DOKŁADNIE ${target} ${questionAdj} pytań ABCD w formacie JSON. Pytania muszą łączyć fakty z różnych części tego fragmentu.
 
 ${jsonAndRules}
 
 ${negativeGuidance}
 ${benchmarkGuidance}
+- archetyp pytania #1: ${primaryArchetype},
+- archetyp pytania #2: ${secondaryArchetype},
 
 KONTEKST:
 ---
@@ -1379,6 +1634,7 @@ ${chunk.context.slice(0, MAX_PAGE_CONTEXT_CHARS_TEXT).trim()}
       visionCalls,
       totalLatencyMs,
       rejectReasons,
+      difficulty,
     },
   };
 }

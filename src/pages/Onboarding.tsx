@@ -2,12 +2,19 @@ import { openUrl } from "@tauri-apps/plugin-opener";
 import { invoke } from "@tauri-apps/api/core";
 import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
+import { GeminiKeySetup } from "../components/GeminiKeySetup";
+import { AiModelSelector } from "../components/AiModelSelector";
 import { OllamaModelsFolderSection } from "../components/OllamaModelsFolderSection";
 import {
   EMBEDDING_MODEL,
-  MODEL_PROFILES,
+  type AiProviderId,
   type ModelProfileId,
 } from "../lib/constants";
+import {
+  getDefaultModelForProvider,
+  modelProfileIdFromOllamaTag,
+  ollamaTagFromModelProfileId,
+} from "../lib/ai/models";
 import { ensureOllamaRunning } from "../lib/ollamaAutostart";
 import { ollamaListModels, ollamaPull, ollamaTagsReachable } from "../lib/ollama";
 import { saveUsageStatsToSupabase } from "../lib/supabase";
@@ -18,11 +25,12 @@ import {
   setOllamaModelsDir,
   setOnboardingDone,
   setUsageStatsConsent,
+  getDefaultAiProviderForNewUser,
   type LocalProfile,
 } from "../lib/storage";
 
 const STEPS = [
-  "Ollama",
+  "Asystent AI",
   "Jak się do Ciebie zwracać",
   "Uczelnia",
   "Kierunek",
@@ -196,6 +204,10 @@ export function Onboarding() {
   const navigate = useNavigate();
   const [step, setStep] = useState(0);
   const [ollamaOk, setOllamaOk] = useState<boolean | null>(null);
+  const [aiProvider, setAiProvider] = useState<AiProviderId>(
+    getDefaultAiProviderForNewUser(),
+  );
+  const [geminiKeyReady, setGeminiKeyReady] = useState(false);
   const [ollamaChecking, setOllamaChecking] = useState(false);
   const [ollamaDiag, setOllamaDiag] = useState<OllamaDiagnosis | null>(null);
   const [name, setName] = useState("");
@@ -204,6 +216,9 @@ export function Onboarding() {
   const [customField, setCustomField] = useState("");
   const [modelsDir, setModelsDir] = useState<string | null>(null);
   const [profile, setProfile] = useState<ModelProfileId>("e2b-it");
+  const [aiModel, setAiModel] = useState<string>(
+    getDefaultModelForProvider(getDefaultAiProviderForNewUser()),
+  );
   const [profileTouched, setProfileTouched] = useState(false);
   const [specs, setSpecs] = useState<SystemSpecs | null>(null);
   const [usageConsent, setUsageConsent] = useState(getUsageStatsConsent);
@@ -221,7 +236,7 @@ export function Onboarding() {
   const back = () => setStep((s) => Math.max(s - 1, 0));
 
   useEffect(() => {
-    if (step !== 0) return;
+    if (step !== 0 || aiProvider !== "ollama") return;
     let cancelled = false;
     void (async () => {
       setOllamaChecking(true);
@@ -249,7 +264,7 @@ export function Onboarding() {
     return () => {
       cancelled = true;
     };
-  }, [step]);
+  }, [step, aiProvider]);
 
   useEffect(() => {
     if (!isTauri()) return;
@@ -271,6 +286,7 @@ export function Onboarding() {
     if (profileTouched) return;
     const recommendation = recommendedProfileForSpecs(specs).profile;
     setProfile(recommendation);
+    setAiModel(ollamaTagFromModelProfileId(recommendation));
   }, [specs, profileTouched]);
 
   const recheckOllama = async () => {
@@ -318,7 +334,9 @@ export function Onboarding() {
   };
 
   const canContinue = (): boolean => {
-    if (step === 0) return ollamaOk === true;
+    if (step === 0) {
+      return aiProvider === "gemini" ? geminiKeyReady : ollamaOk === true;
+    }
     if (step === 1) return name.trim().length > 1;
     if (step === 2) return uni.trim().length > 1;
     if (step === 3) return resolvedField.length > 1;
@@ -328,6 +346,10 @@ export function Onboarding() {
 
   const goNext = async () => {
     if (!canContinue()) return;
+    if (step === 4 && aiProvider === "gemini") {
+      setStep(6);
+      return;
+    }
     if (step === 4) {
       setOllamaModelsDir(modelsDir);
       if (modelsDir && isTauri()) {
@@ -360,6 +382,8 @@ export function Onboarding() {
       university: uni.trim(),
       fieldOfStudy: resolvedField,
       modelProfile: profile,
+      aiProvider,
+      aiModel,
     };
     saveLocalProfile(local);
     setOllamaModelsDir(modelsDir);
@@ -390,7 +414,7 @@ export function Onboarding() {
       percent: null,
     });
     try {
-      const tag = MODEL_PROFILES[profile].ollamaTag;
+      const tag = aiModel;
       setPullLog([
         `Plan pobierania:`,
         `- model czatu: ${tag}`,
@@ -462,10 +486,58 @@ export function Onboarding() {
         </p>
 
         {step === 0 && (
-          <div className="space-y-4">
+          <div className="space-y-5">
             <p className="text-on-surface font-semibold m-0">
-              EduMelon potrzebuje lokalnej Ollamy,
+              Wybierz asystenta AI
             </p>
+            <label className="flex items-start gap-3 cursor-pointer rounded-2xl bg-surface-container-high px-4 py-3">
+              <input
+                type="radio"
+                name="aiProvider"
+                className="mt-1"
+                checked={aiProvider === "gemini"}
+                onChange={() => setAiProvider("gemini")}
+              />
+              <span className="text-sm text-on-surface">
+                <strong>Chmura Gemini</strong> (szybki start, zalecany) — darmowy
+                klucz z Google AI Studio.
+              </span>
+            </label>
+            <label className="flex items-start gap-3 cursor-pointer rounded-2xl bg-surface-container-high px-4 py-3">
+              <input
+                type="radio"
+                name="aiProvider"
+                className="mt-1"
+                checked={aiProvider === "ollama"}
+                onChange={() => setAiProvider("ollama")}
+              />
+              <span className="text-sm text-on-surface">
+                <strong>Lokalny AI (Ollama)</strong> — modele na Twoim komputerze.
+              </span>
+            </label>
+
+            {aiProvider === "gemini" ? (
+              <>
+                <GeminiKeySetup onReadyChange={setGeminiKeyReady} compact />
+                <AiModelSelector
+                  compact
+                  aiProvider={aiProvider}
+                  aiModel={aiModel}
+                  onProviderChange={(provider) => {
+                    setAiProvider(provider);
+                    setAiModel(getDefaultModelForProvider(provider));
+                  }}
+                  onModelChange={(model) => {
+                    setAiModel(model.id);
+                    setAiProvider(model.provider);
+                  }}
+                />
+              </>
+            ) : (
+              <div className="space-y-4 border-t border-outline-variant pt-4">
+                <p className="text-on-surface font-semibold m-0">
+                  EduMelon potrzebuje lokalnej Ollamy
+                </p>
             <div className="rounded-xl bg-surface-container-high px-4 py-3 text-xs text-on-surface-variant space-y-1">
               <p className="m-0 font-semibold text-on-surface">
                 Instrukcja instalacji Ollamy (krok po kroku)
@@ -547,6 +619,8 @@ export function Onboarding() {
                 </p>
               )}
             </div>
+              </div>
+            )}
           </div>
         )}
 
@@ -645,10 +719,6 @@ export function Onboarding() {
 
         {step === 5 && (
           <div className="space-y-4">
-            <p className="text-sm text-on-surface-variant m-0">
-              Wybierz profil modelu. Tagi nadpiszesz w{" "}
-              <code className="text-on-surface">.env</code>.
-            </p>
             <div className="rounded-2xl bg-surface-container-high px-4 py-3 space-y-1">
               <p className="text-sm font-semibold text-on-surface m-0">
                 Rekomendacja sprzętowa
@@ -676,50 +746,21 @@ export function Onboarding() {
                 pobieraniem, jeśli chcesz użyć wybranego folderu.
               </p>
             )}
-            <label className="flex items-start gap-3 cursor-pointer">
-              <input
-                type="radio"
-                name="m"
-                className="mt-1"
-                checked={profile === "e2b-it"}
-                onChange={() => {
-                  setProfile("e2b-it");
-                  setProfileTouched(true);
-                }}
-              />
-              <span className="text-sm text-on-surface">
-                {MODEL_PROFILES["e2b-it"].label} —{" "}
-                {MODEL_PROFILES["e2b-it"].description}
-                {recommendedProfileForSpecs(specs).profile === "e2b-it" && (
-                  <span className="ml-2 inline-flex items-center rounded-full bg-primary/15 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide text-primary">
-                    Rekomendowany
-                  </span>
-                )}
-              </span>
-            </label>
-            <label className="flex items-start gap-3 cursor-pointer">
-              <input
-                type="radio"
-                name="m"
-                className="mt-1"
-                checked={profile === "e4b-it"}
-                onChange={() => {
-                  setProfile("e4b-it");
-                  setProfileTouched(true);
-                }}
-              />
-              <span className="text-sm text-on-surface">
-                {MODEL_PROFILES["e4b-it"].label} —{" "}
-                {MODEL_PROFILES["e4b-it"].description}
-                {recommendedProfileForSpecs(specs).profile === "e4b-it" && (
-                  <span className="ml-2 inline-flex items-center rounded-full bg-primary/15 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide text-primary">
-                    Rekomendowany
-                  </span>
-                )}
-              </span>
-            </label>
+            <AiModelSelector
+              compact
+              lockProvider
+              aiProvider="ollama"
+              aiModel={aiModel}
+              onProviderChange={() => {}}
+              onModelChange={(model) => {
+                setAiModel(model.id);
+                setProfileTouched(true);
+                const mp = modelProfileIdFromOllamaTag(model.id);
+                if (mp) setProfile(mp);
+              }}
+            />
             <p className="text-xs text-on-surface-variant m-0">
-              Czat: <code>{MODEL_PROFILES[profile].ollamaTag}</code> · embed:{" "}
+              Czat: <code>{aiModel}</code> · embed:{" "}
               <code>{EMBEDDING_MODEL}</code>
             </p>
             <p className="text-[11px] text-on-surface-variant m-0">
@@ -750,7 +791,7 @@ export function Onboarding() {
                   <div>
                     <p className="text-sm font-semibold text-on-surface m-0">
                       {pullProgress.stage === "chat"
-                        ? `Pobieranie modelu czatu: ${MODEL_PROFILES[profile].ollamaTag}`
+                        ? `Pobieranie modelu czatu: ${aiModel}`
                         : `Pobieranie embeddingów: ${EMBEDDING_MODEL}`}
                     </p>
                     <p className="text-xs text-on-surface-variant m-0">

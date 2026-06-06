@@ -28,6 +28,7 @@ export function Upload() {
     setBusy(true);
     setLog(null);
     setProgress({ label: "Startuję import…", percent: 1 });
+    let failed = false;
     try {
       const t = title.trim() || base.replace(/\.(pdf|pptx)$/i, "");
       const id = await ingestFileFromPath(path, t, folderId, {
@@ -36,10 +37,11 @@ export function Upload() {
       setLog(`Zapisano materiał.`);
       navigate(`/app/summary/${id}`);
     } catch (e) {
+      failed = true;
       setLog(e instanceof Error ? e.message : String(e));
     } finally {
       setBusy(false);
-      setProgress(null);
+      if (!failed) setProgress(null);
     }
   };
 
@@ -57,7 +59,7 @@ export function Upload() {
                 Wgrywanie i analiza
               </h2>
               <p className="text-sm text-on-surface-variant mt-1">
-                PDF lub PPTX → tekst → chunking → embedding (Ollama)
+                PDF lub PPTX → tekst → indeks do wyszukiwania w czacie
               </p>
             </div>
           </div>

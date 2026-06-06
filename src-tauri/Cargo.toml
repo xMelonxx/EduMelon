@@ -1,6 +1,6 @@
 [package]
 name = "edumelon-temp"
-version = "0.1.12"
+version = "0.1.13"
 description = "A Tauri App"
 authors = ["you"]
 edition = "2021"
@@ -32,6 +32,10 @@ zip = "8.5.1"
 quick-xml = "0.39.2"
 uuid = "1.23.0"
 chrono = "0.4.44"
-reqwest = { version = "0.13.2", features = ["json"] }
+reqwest = { version = "0.13.2", features = ["json", "stream"] }
+futures-util = "0.3"
+tauri-plugin-store = "2"
 sysinfo = "0.37.2"
+base64 = "0.22"
+
 

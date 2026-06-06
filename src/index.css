@@ -110,3 +110,12 @@ html.dark .folder-card::after {
   pointer-events: none;
   z-index: -1;
 }
+
+@keyframes gemini-wait {
+  0% {
+    transform: translateX(-120%);
+  }
+  100% {
+    transform: translateX(320%);
+  }
+}

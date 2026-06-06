@@ -1,25 +1,47 @@
 import type { ChunkRow } from "./db";
-import { ollamaChat } from "./ollama";
+import { geminiBatchDelayMs, getAiProvider, sleep } from "./ai/aiManager";
+import type { AiOptions } from "./ai/types";
 import {
+  materialContextFromChunks,
+  useSingleShotCloudGeneration,
+} from "./cloudGeneration";
+import {
+  buildFlashcardsPrompt,
   buildFlashcardsPromptWithOutline,
   buildFlashcardsTopUpPrompt,
   buildTopicOutlinePrompt,
 } from "./prompts";
 import {
-  hasDuplicateNormalizedFronts,
-  hasMetaSummaryStyleBacks,
-  isRepetitiveFlashcards,
-} from "./flashcardVariety";
+  formatFlashcardGenerationFailureMessage,
+  GEMINI_FLASHCARD_PROGRESS_STEPS,
+  runWithGeminiWaitProgress,
+  type AiGenerationProgress,
+} from "./geminiProgress";
 import {
   buildOllamaFlashcardsArraySchema,
   parseFlashcardsFromModel,
   parseJsonStringArray,
 } from "./parseFlashcardsResponse";
+import {
+  hasDuplicateNormalizedFronts,
+  hasMetaSummaryStyleBacks,
+  isRepetitiveFlashcards,
+} from "./flashcardVariety";
 
-/** Nieco wyższa temperatura niż przy streszczeniach — mniej ryzyka 10× tej samej fiszki. */
-const OLLAMA_FLASH_BASE_OPTS = {
+const FLASH_BASE_OPTS = {
   temperature: 0.32,
 } as const;
+
+async function providerChat(
+  model: string,
+  messages: { role: string; content: string }[],
+  options?: AiOptions,
+): Promise<string> {
+  if (!useSingleShotCloudGeneration()) {
+    await sleep(geminiBatchDelayMs());
+  }
+  return getAiProvider().chat(model, messages, options);
+}
 
 /** Długa tablica JSON — wymusza wystarczający limit tokenów na N fiszek. */
 function flashcardNumPredict(forCount: number): number {
@@ -107,11 +129,7 @@ export type GenerateFlashcardsMaterialOptions = {
 };
 
 /** Informacja o etapie generowania fiszek (UI: pasek + opis). */
-export type FlashcardGenProgress = {
-  label: string;
-  /** 0–100, przybliżony postęp całego procesu */
-  percent: number;
-};
+export type FlashcardGenProgress = AiGenerationProgress;
 
 function dedupeTopicLabels(topics: string[]): string[] {
   const seen = new Set<string>();
@@ -171,32 +189,32 @@ async function buildTopicsForGeneration(
       minItems: count,
       maxItems: count,
     } as const;
-    const chatText = await ollamaChat(
+    const chatText = await providerChat(
       model,
       [
         { role: "system", content: system },
         { role: "user", content: user },
       ],
       {
-        ...OLLAMA_FLASH_BASE_OPTS,
+        ...FLASH_BASE_OPTS,
         temperature: 0.42,
-        num_predict: Math.min(16384, Math.max(8192, count * 120 + 2048)),
+        numPredict: Math.min(16384, Math.max(8192, count * 120 + 2048)),
         format: outlineSchema,
       },
     );
     raw = parseJsonStringArray(chatText) ?? [];
   } catch {
     try {
-      const chatText2 = await ollamaChat(
+      const chatText2 = await providerChat(
         model,
         [
           { role: "system", content: system },
           { role: "user", content: user },
         ],
         {
-          ...OLLAMA_FLASH_BASE_OPTS,
+          ...FLASH_BASE_OPTS,
           temperature: 0.42,
-          num_predict: Math.min(16384, Math.max(8192, count * 120 + 2048)),
+          numPredict: Math.min(16384, Math.max(8192, count * 120 + 2048)),
           format: "json",
         },
       );
@@ -267,9 +285,9 @@ async function topUpFlashcardsToTarget(
 
     let more: { front: string; back: string }[] = [];
     try {
-      const raw = await ollamaChat(model, messages, {
-        ...OLLAMA_FLASH_BASE_OPTS,
-        num_predict: flashcardNumPredict(need),
+      const raw = await providerChat(model, messages, {
+        ...FLASH_BASE_OPTS,
+        numPredict: flashcardNumPredict(need),
         format: buildOllamaFlashcardsArraySchema(need),
       });
       more = parseFlashcardsFromModel(raw);
@@ -278,9 +296,9 @@ async function topUpFlashcardsToTarget(
     }
     if (more.length === 0) {
       try {
-        const raw = await ollamaChat(model, messages, {
-          ...OLLAMA_FLASH_BASE_OPTS,
-          num_predict: flashcardNumPredict(need),
+        const raw = await providerChat(model, messages, {
+          ...FLASH_BASE_OPTS,
+          numPredict: flashcardNumPredict(need),
           format: "json",
         });
         more = parseFlashcardsFromModel(raw);
@@ -396,9 +414,9 @@ async function runFlashcardGenerationAttempts(
         label: `${batchPrefix}Generuję fiszki — próba ${ai + 1} z ${attempts.length}`,
         percent: 24 + Math.round(((ai + 1) / attempts.length) * 48),
       });
-      const raw = await ollamaChat(model, att.messages, {
-        ...OLLAMA_FLASH_BASE_OPTS,
-        num_predict: flashcardNumPredict(count),
+      const raw = await providerChat(model, att.messages, {
+        ...FLASH_BASE_OPTS,
+        numPredict: flashcardNumPredict(count),
         format: att.format,
       });
       let cards = parseFlashcardsFromModel(raw);
@@ -520,6 +538,114 @@ async function generateFromChunkSegments(
   return dedupeFlashcardsByFront(merged).slice(0, count);
 }
 
+/** Gemini: jedno zapytanie zamiast outline → partie → uzupełniania. */
+async function generateFlashcardsGeminiSingleShot(
+  model: string,
+  context: string,
+  count: number,
+  detail: "short" | "medium" | "long",
+  onProgress?: (p: FlashcardGenProgress) => void,
+  options?: GenerateFlashcardsMaterialOptions,
+): Promise<{ front: string; back: string }[]> {
+  const ctx = (
+    options?.chunkRows?.length
+      ? materialContextFromChunks(options.chunkRows)
+      : context
+  ).trim();
+  if (!ctx) {
+    throw new Error("Brak treści materiału do wygenerowania fiszek.");
+  }
+
+  onProgress?.({
+    label: "Przygotowuję generowanie fiszek…",
+    percent: 8,
+    stepIndex: 0,
+    steps: GEMINI_FLASHCARD_PROGRESS_STEPS,
+  });
+
+  const { system, user } = buildFlashcardsPrompt(ctx, count, detail, {
+    strictJsonFooter: true,
+  });
+  const messages = [
+    { role: "system", content: system },
+    { role: "user", content: user },
+  ];
+  const schema = buildOllamaFlashcardsArraySchema(count);
+
+  let raw: string;
+  raw = await runWithGeminiWaitProgress(
+      onProgress,
+      {
+        label: "Gemini tworzy fiszki z materiału…",
+        percent: 35,
+        stepIndex: 1,
+        steps: GEMINI_FLASHCARD_PROGRESS_STEPS,
+      },
+      async () => {
+        try {
+          return await getAiProvider().chat(model, messages, {
+            ...FLASH_BASE_OPTS,
+            temperature: 0.35,
+            numPredict: flashcardNumPredict(count),
+            format: schema,
+          });
+        } catch {
+          return getAiProvider().chat(model, messages, {
+            ...FLASH_BASE_OPTS,
+            temperature: 0.35,
+            numPredict: flashcardNumPredict(count),
+            format: "json",
+          });
+        }
+      },
+      { messageKind: "flashcards" },
+  );
+
+  onProgress?.({
+    label: "Przetwarzam odpowiedź…",
+    percent: 88,
+    stepIndex: 2,
+    steps: GEMINI_FLASHCARD_PROGRESS_STEPS,
+  });
+
+  const parsedCards = parseFlashcardsFromModel(raw);
+  let cards = dedupeFlashcardsByFront(parsedCards);
+  if (cards.length === 0) {
+    throw new Error(
+      formatFlashcardGenerationFailureMessage({
+        targetCount: count,
+        parsedCount: parsedCards.length,
+        finalCount: 0,
+      }),
+    );
+  }
+  if (cards.length < count) {
+    throw new Error(
+      `Gemini zwróciło ${cards.length} fiszek zamiast ${count}. Zmniejsz liczbę lub spróbuj ponownie.`,
+    );
+  }
+
+  cards = cards.slice(0, count);
+  if (hasDuplicateNormalizedFronts(cards)) {
+    throw new Error(
+      "Powtórzone pytania na frontach. Spróbuj ponownie wygenerować zestaw.",
+    );
+  }
+  if (hasMetaSummaryStyleBacks(cards)) {
+    throw new Error(
+      "Zbyt wiele ogólnych tyłów. Spróbuj ponownie wygenerować zestaw.",
+    );
+  }
+
+  onProgress?.({
+    label: "Zestaw fiszek gotowy.",
+    percent: 99,
+    stepIndex: 2,
+    steps: GEMINI_FLASHCARD_PROGRESS_STEPS,
+  });
+  return cards;
+}
+
 /**
  * Lista tematów (outline) + generowanie fiszek przypiętych do kolejnych pozycji listy.
  */
@@ -532,6 +658,17 @@ export async function generateFlashcardsFromMaterial(
   options?: GenerateFlashcardsMaterialOptions,
 ): Promise<{ front: string; back: string }[]> {
   onProgress?.({ label: "Przygotowuję generowanie fiszek…", percent: 2 });
+
+  if (useSingleShotCloudGeneration()) {
+    return generateFlashcardsGeminiSingleShot(
+      model,
+      context,
+      count,
+      detail,
+      onProgress,
+      options,
+    );
+  }
 
   if (
     options?.chunkRows &&
